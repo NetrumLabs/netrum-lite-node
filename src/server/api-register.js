@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fetch from 'node-fetch';
+import { checkIfRegistered } from '../contracts/lite-register.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.join(__dirname, '../..');
@@ -30,12 +31,18 @@ function parseSignFile() {
 
 async function registerNode() {
   try {
-    // Read transaction hash
-    const TX_HASH = fs.readFileSync(TX_HASH_PATH, 'utf-8').trim();
-    
+
     // Parse sign file
     const { nodeId, signerAddress, timestamp, signature } = parseSignFile();
 
+    if (await checkIfRegistered(signerAddress)) {
+      console.log("ℹ️ This address is already registered onchain, no need to check.");
+      return;
+    }
+
+    // Read transaction hash
+    const TX_HASH = fs.readFileSync(TX_HASH_PATH, 'utf-8').trim();
+    
     const payload = {
       wallet: signerAddress,
       nodeId: nodeId,
