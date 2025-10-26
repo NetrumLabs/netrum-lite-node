@@ -33,7 +33,7 @@ function getStatusEmoji(statusType) {
   }
 }
 
-function formatStatus(info) {
+function formatStatus(info, taskCount) {
   const statusEmoji = getStatusEmoji(info.statusType);
   let statusText;
   
@@ -56,6 +56,7 @@ function formatStatus(info) {
     `${info.percentComplete.toFixed(2)}%`,
     `Mined: ${formatTokens(info.minedTokens)} NPT`,
     `Speed: ${formatTokens(info.speedPerSec)}/s`,
+    `Tasks: ${taskCount}`, // ✅ NEW: Task count added
     `Status: ${statusEmoji} ${statusText}`
   ].join(' | ');
 }
@@ -74,15 +75,17 @@ async function pollMiningStatus(address) {
       throw new Error(json.error || json.message || 'API returned an error');
     }
 
-    // Extract the liveInfo payload:
+    // Extract the liveInfo payload and taskCount:
     const info = json.liveInfo;
+    const taskCount = json.taskCount || 0; // ✅ Get task count from response
+    
     if (!info || typeof info !== 'object') {
       throw new Error('Invalid response format');
     }
 
     // Clear and print
     process.stdout.write('\x1Bc');
-    console.log(formatStatus(info));
+    console.log(formatStatus(info, taskCount));
 
     // Exit if mining is inactive due to 30-day no claim
     if (info.statusType === 'inactive') {
