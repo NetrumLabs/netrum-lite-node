@@ -104,7 +104,7 @@ const getTaskFromServer = async () => {
     const response = await api.post(TASK_PROVIDER_URL, {
       miningToken,
       nodeId,
-      authCode    // ✅ Encrypted code that user can't read
+      authCode 
     });
 
     if (response.data?.success && response.data.task) {
