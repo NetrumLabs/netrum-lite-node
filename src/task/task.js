@@ -7,8 +7,9 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Configuration - ONLY TASK PROVIDER
+// Configuration
 const API_BASE_URL = 'https://api.v2.netrumlabs.com';
+const AUTH_CODE_URL = '/api/node/polling/getAuthCode';
 const TASK_PROVIDER_URL = '/api/node/polling/taskProvider';
 
 // File paths
@@ -52,7 +53,32 @@ const getNodeId = () => {
   }
 };
 
-// Get task from server - ONLY TASK PROVIDER
+// Get Encrypted Auth Code - NEW FUNCTION
+const getEncryptedAuthCode = async (miningToken, nodeId) => {
+  try {
+    const response = await api.post(AUTH_CODE_URL, {
+      miningToken,
+      nodeId
+    });
+
+    if (response.data?.success) {
+      log(`🔐 Auth code received (expires in ${response.data.expiresIn}s)`);
+      return response.data.authCode;
+    } else {
+      log(`❌ Auth code error: ${response.data?.error}`);
+      return null;
+    }
+  } catch (err) {
+    if (err.response) {
+      log(`Auth code error: ${err.response.status} - ${JSON.stringify(err.response.data)}`);
+    } else {
+      log(`Auth code request failed: ${err.message}`);
+    }
+    return null;
+  }
+};
+
+// Get task from server - WITH ENCRYPTED AUTH CODE
 const getTaskFromServer = async () => {
   try {
     const miningToken = getMiningToken();
@@ -68,17 +94,31 @@ const getTaskFromServer = async () => {
       return null;
     }
 
+    // Step 1: Get encrypted auth code first
+    const authCode = await getEncryptedAuthCode(miningToken, nodeId);
+    if (!authCode) {
+      return null;
+    }
+
+    // Step 2: Use the encrypted auth code to get tasks
     const response = await api.post(TASK_PROVIDER_URL, {
       miningToken,
-      nodeId
+      nodeId,
+      authCode    // ✅ Encrypted code that user can't read
     });
 
     if (response.data?.success && response.data.task) {
-      log(`✅ Task received: ${response.data.task.taskId}`);
+      const taskType = response.data.taskCategory === 'BLANK_TASK' ? 'Task-B' : 'Task-T';
+      log(`✅ ${taskType} received: ${response.data.task.taskId}`);
       log(`📊 RAM Required: ${response.data.task.ramRequired}GB`);
-      return response.data.task;
+      log(`🔢 Task Count: ${response.data.userTaskCount || 0}`);
+      return response.data;
+    } else if (response.data?.success) {
+      log(`📊 Status: ${response.data.message}`);
+      log(`🔢 Task Count: ${response.data.userTaskCount || 0}`);
+      return response.data;
     } else {
-      log(`⏳ No task available: ${response.data?.message}`);
+      log(`❌ API Error: ${response.data?.error}`);
       return null;
     }
 
@@ -92,57 +132,100 @@ const getTaskFromServer = async () => {
   }
 };
 
-// Process task (2GB RAM fix use)
-const processTask = async (task) => {
+// Process task - UPDATED LOGS
+const processTask = async (taskData) => {
   try {
-    log(`🔄 Processing task: ${task.taskId} (Using ${task.ramRequired}GB RAM)`);
+    const { task, taskCategory } = taskData;
     
-    // Simulate task processing - TTS conversion
-    await new Promise(resolve => setTimeout(resolve, 5000));
-    
-    log(`✅ Task completed: ${task.taskId}`);
-    return true;
+    if (taskCategory === 'BLANK_TASK' || task.isBlankTask) {
+      log(`🔄 Processing Task-B: ${task.taskId}`);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      log(`✅ Task-B completed: ${task.taskId}`);
+      return { success: true, isBlankTask: true };
+    } else {
+      log(`🔄 Processing Task-T: ${task.taskId} (Using ${task.ramRequired}GB RAM)`);
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      log(`✅ Task-T completed: ${task.taskId}`);
+      return { success: true, isBlankTask: false };
+    }
     
   } catch (err) {
     log(`❌ Task processing failed: ${err.message}`);
+    return { success: false, isBlankTask: false };
+  }
+};
+
+// Complete task on server
+const completeTaskOnServer = async (taskId, nodeId, status, taskCategory) => {
+  try {
+    const miningToken = getMiningToken();
+    const authCode = await getEncryptedAuthCode(miningToken, nodeId);
+    
+    if (!authCode) {
+      log('❌ Cannot get auth code for task completion');
+      return false;
+    }
+
+    const response = await api.put(TASK_PROVIDER_URL, {
+      taskId,
+      nodeId,
+      status,
+      taskCategory,
+      authCode,  // ✅ Encrypted code for completion
+      result: taskCategory === 'BLANK_TASK' ? 'blank_task_completed' : 'tts_processing_completed'
+    });
+
+    if (response.data?.success) {
+      log(`✅ Task ${taskId} completion acknowledged`);
+      return true;
+    } else {
+      log(`❌ Task completion failed: ${response.data?.error}`);
+      return false;
+    }
+  } catch (err) {
+    log(`❌ Task completion error: ${err.message}`);
     return false;
   }
 };
 
-// Main task processing loop - Fast 3 second polling
+// Main loop
 const processTasks = async () => {
   try {
-    log('🚀 Starting task processor with fast polling...');
+    log('🚀 Starting task processor with encrypted authentication...');
+    const nodeId = getNodeId();
     
     while (true) {
-      // Get task from server
-      const task = await getTaskFromServer();
+      const taskData = await getTaskFromServer();
       
-      if (task) {
-        // Process task with allocated RAM
-        const success = await processTask(task);
+      if (taskData && taskData.task) {
+        const result = await processTask(taskData);
         
-        if (success) {
-          log(`🎉 Task ${task.taskId} completed successfully`);
-        } else {
-          log(`⚠️ Task ${task.taskId} failed`);
+        if (result.success) {
+          await completeTaskOnServer(
+            taskData.task.taskId, 
+            nodeId, 
+            'completed', 
+            taskData.taskCategory
+          );
+          const taskType = taskData.taskCategory === 'BLANK_TASK' ? 'Task-B' : 'Task-T';
+          log(`🎉 ${taskType} ${taskData.task.taskId} completed successfully`);
         }
         
-        // Wait 3 seconds before next poll (fast polling)
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      } else if (taskData?.success) {
+        log('📊 Node is active and ready for tasks');
         await new Promise(resolve => setTimeout(resolve, 3000));
       } else {
-        // No task available, wait 3 seconds before retry
-        log('⏳ No tasks available, checking again in 3 seconds...');
+        log('⏳ Retrying in 3 seconds...');
         await new Promise(resolve => setTimeout(resolve, 3000));
       }
     }
     
   } catch (err) {
     log(`❌ Task processor error: ${err.message}`);
-    // Restart after error
     setTimeout(processTasks, 5000);
   }
 };
 
-// Start task processing
+// Start
 processTasks();
