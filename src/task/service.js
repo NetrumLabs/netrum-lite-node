@@ -9,7 +9,7 @@ import { execSync } from 'child_process';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const templatePath = path.join(__dirname, './service.txt');
-const serviceDest = '/etc/systemd/system/netrum-tts.service';
+const serviceDest = '/etc/systemd/system/netrum-task.service';
 
 /* ── Log Function ──────────────────────────────────────── */
 const log = (msg) => console.log(`[TTS-SERVICE] ${msg}`);
@@ -34,8 +34,8 @@ const setupService = () => {
         /* ── Step 3: Read and write systemd service file ─── */
         log('Creating systemd service file...');
         const serviceTemplate = fs.readFileSync(templatePath, 'utf8');
-        fs.writeFileSync('/tmp/netrum-tts-service.tmp', serviceTemplate);
-        execSync(`mv /tmp/netrum-tts-service.tmp ${serviceDest}`);
+        fs.writeFileSync('/tmp/netrum-task-service.tmp', serviceTemplate);
+        execSync(`mv /tmp/netrum-task-service.tmp ${serviceDest}`);
         execSync(`chmod 644 ${serviceDest}`);
         log('✅ Service file created');
 
@@ -44,26 +44,26 @@ const setupService = () => {
         execSync('systemctl daemon-reload');
         
         log('Enabling service...');
-        execSync('systemctl enable netrum-tts.service');
+        execSync('systemctl enable netrum-task.service');
         
         log('Starting service...');
-        execSync('systemctl start netrum-tts.service');
+        execSync('systemctl start netrum-task.service');
         
         log('Checking service status...');
-        const status = execSync('systemctl is-active netrum-tts.service').toString().trim();
+        const status = execSync('systemctl is-active netrum-task.service').toString().trim();
         
         if (status === 'active') {
-            log('🎉 Netrum TTS Service setup completed successfully!');
+            log('🎉 Netrum task Service setup completed successfully!');
         } else {
             log(`⚠️ Service status: ${status}`);
         }
 
         /* ── Step 5: Show useful commands ────────────────── */
         console.log('\n📋 Useful Commands:');
-        console.log('  sudo systemctl status netrum-tts.service    # Check status');
-        console.log('  sudo journalctl -u netrum-tts.service -f    # Live logs');
-        console.log('  sudo systemctl restart netrum-tts.service   # Restart service');
-        console.log('  sudo systemctl stop netrum-tts.service      # Stop service');
+        console.log('  sudo systemctl status netrum-task.service    # Check status');
+        console.log('  sudo journalctl -u netrum-task.service -f    # Live logs');
+        console.log('  sudo systemctl restart netrum-task.service   # Restart service');
+        console.log('  sudo systemctl stop netrum-task.service      # Stop service');
 
     } catch (error) {
         log(`❌ Setup failed: ${error.message}`);
