@@ -39,7 +39,8 @@ const getSystemMetrics = () => {
       ram: Math.round(os.totalmem() / (1024 ** 2)),
       disk: Math.round(diskusage.checkSync('/').free / (1024 ** 3)),
       speed: 5,
-      lastSeen: Math.floor(Date.now() / 1000)
+      lastSeen: Math.floor(Date.now() / 1000),
+      systemPermission: true // ✅ ADDED: System permission true
     };
   } catch (err) {
     log(`Metrics error: ${err.message}`, 'error');
@@ -92,13 +93,15 @@ const syncNode = async () => {
     const response = await api.post(SYNC_ENDPOINT, {
       nodeId,
       nodeMetrics: metrics,
-      nodeStatus: isActive ? 'Active' : 'InActive'
+      syncStatus: isActive ? 'Active' : 'InActive', // ✅ CHANGED: nodeStatus → syncStatus
+      systemPermission: true // ✅ ADDED: System permission
     });
 
     if (response.data?.success) {
       lastSyncTime = Date.now();
       nextSyncAllowed = response.data.nextSyncAllowed || (lastSyncTime + SYNC_COOLDOWN);
       log(`Sync successful. Next sync at ${new Date(nextSyncAllowed).toISOString()}`);
+      log(`Sync Status: ${response.data.syncStatus}`); // ✅ CHANGED: syncStatus
       if (response.data.miningToken) {
         saveToken(response.data.miningToken);
       }
