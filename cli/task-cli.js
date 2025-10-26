@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const filePath = path.join(__dirname, '..src/task/task.js');
+const filePath = path.join(__dirname, '../src/task/task.js');
 
 // If user runs --help
 if (process.argv.includes('--help') || process.argv.includes('-h')) {
