@@ -75,20 +75,6 @@ const getPermissionStatus = () => {
   return loadPermission();
 };
 
-// Auto-enable on first run
-const initializeAutoPermission = () => {
-  const permission = loadPermission();
-  
-  if (!permission.taskPowerEnabled && !permission.termsAccepted) {
-    console.log('🔄 Auto-enabling Task Power Sharing...');
-    enableTaskPower();
-    console.log('✅ Task Power Sharing enabled automatically (2GB RAM)');
-  }
-};
-
-// Run auto initialization
-initializeAutoPermission();
-
 export { 
   loadPermission, 
   savePermission, 
