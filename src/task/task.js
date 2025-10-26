@@ -12,7 +12,7 @@ const API_BASE_URL = 'https://api.v2.netrumlabs.com';
 const TASK_PROVIDER_URL = '/api/node/polling/taskProvider';
 
 // File paths
-const MINING_TOKEN_PATH = path.resolve(__dirname, '../mining/miningtoken.txt');
+const MINING_TOKEN_PATH = path.resolve(__dirname, '../system/mining/miningtoken.txt');
 const NODE_ID_PATH = path.resolve(__dirname, '../identity/node-id/id.txt');
 
 const api = axios.create({
