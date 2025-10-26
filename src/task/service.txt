@@ -1,0 +1,17 @@
+# src/task/service.txt
+[Unit]
+Description=Netrum TTS Task Processor
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/netrum-lite-node
+ExecStart=/usr/bin/node /root/netrum-lite-node/src/task/task.js
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

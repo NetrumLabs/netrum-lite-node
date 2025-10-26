@@ -9,7 +9,6 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-
 // Configuration
 const API_BASE_URL = 'https://api.v2.netrumlabs.com';
 const SYNC_ENDPOINT = '/api/node/metrics/sync';
@@ -22,7 +21,6 @@ const NODE_REQUIREMENTS = {
   CORES: 2,  // minimum cores
   STORAGE: 50 // in GB
 };
-
 
 // Configure axios instance
 const api = axios.create({
@@ -37,14 +35,42 @@ const api = axios.create({
 // Helper functions
 const log = (msg) => console.error(`[${new Date().toISOString()}] ${msg}`);
 
-const getSystemMetrics = () => {
+// Permission system import and check
+const loadPermissionSystem = async () => {
   try {
+    const permissionPath = path.resolve(__dirname, '../system/permission.js');
+    const { loadPermission } = await import(permissionPath);
+    const permission = loadPermission();
+    
+    if (!permission.taskPowerEnabled) {
+      log('System Permission Restart');
+      return false;
+    }
+    
+    return permission.taskPowerEnabled;
+  } catch (err) {
+    log(`Permission system error: ${err.message}`);
+    return false;
+  }
+};
+
+const getSystemMetrics = async () => {
+  try {
+    const systemPermission = await loadPermissionSystem();
+    
+    if (!systemPermission) {
+      log('System Permission Restart');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      return await getSystemMetrics();
+    }
+
     return {
       cpu: os.cpus().length,
       ram: Math.round(os.totalmem() / (1024 ** 2)), // MB
       disk: Math.round(diskusage.checkSync('/').free / (1024 ** 3)), // GB
       speed: 5, // Default Mbps
-      lastSeen: Math.floor(Date.now() / 1000)
+      lastSeen: Math.floor(Date.now() / 1000),
+      systemPermission: true
     };
   } catch (err) {
     log(`Metrics error: ${err.message}`);
@@ -70,8 +96,8 @@ const syncNode = async () => {
       'utf8'
     ).trim();
 
-    // 2. Get system metrics
-    const metrics = getSystemMetrics();
+    // 2. Get system metrics with permission check
+    const metrics = await getSystemMetrics();
     if (!metrics) throw new Error('Failed to get metrics');
 
     // 3. Determine node status

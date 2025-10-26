@@ -17,6 +17,8 @@
     "netrum-node-id-remove": "./cli/node-id-remove-cli.js",
     "netrum-node-sign": "./cli/signMsg-cli.js",
     "netrum-node-register": "./cli/register-cli.js",
+    "netrum-task": "./cli/task-cli.js",
+    "netrum-task-log": "./cli/task-log-cli.js",
     "netrum-sync": "./cli/sync-cli.js",
     "netrum-sync-log": "./cli/sync-log-cli.js",
     "netrum-mining": "./cli/mining-cli.js",
