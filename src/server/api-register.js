@@ -30,12 +30,24 @@ function parseSignFile() {
 
 async function registerNode() {
   try {
-    // Read transaction hash
-    const TX_HASH = fs.readFileSync(TX_HASH_PATH, 'utf-8').trim();
+    // step 1 User On-Chain Register check 
+    if (!fs.existsSync(TX_HASH_PATH) || !fs.readFileSync(TX_HASH_PATH, 'utf-8').trim()) {
+      console.error("❌ You are not registered on-chain. Please complete on-chain registration first.");
+      return;
+    }
     
+    // Step 2 Check if data file already exists
+    if (fs.existsSync(OUTPUT_FILE)) {
+      console.log("ℹ️ This address is already registered onchain, Data already exist in Data file");
+      return;
+    }
+
     // Parse sign file
     const { nodeId, signerAddress, timestamp, signature } = parseSignFile();
 
+    // Read transaction hash
+    const TX_HASH = fs.readFileSync(TX_HASH_PATH, 'utf-8').trim();
+    
     const payload = {
       wallet: signerAddress,
       nodeId: nodeId,
@@ -44,7 +56,7 @@ async function registerNode() {
       txHash: TX_HASH
     };
 
-    console.log('?? Sending registration data to server...');
+    console.log('🚀 Sending registration data to server...');
     
     const response = await fetch('https://api.v2.netrumlabs.com/api/node/register-node/', {
       method: 'POST',

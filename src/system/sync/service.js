@@ -12,68 +12,37 @@ const __dirname = path.dirname(__filename);
 // Configuration
 const API_BASE_URL = 'https://api.v2.netrumlabs.com';
 const SYNC_ENDPOINT = '/api/node/metrics/sync';
-const SYNC_INTERVAL = 5000;
 const TOKEN_PATH = path.resolve(__dirname, '../mining/miningtoken.txt');
+const SYNC_COOLDOWN = 60000; // Strict 60-second cooldown
 
-// Minimum system requirements
-const NODE_REQUIREMENTS = { 
-  RAM: 4,    // in GB
-  CORES: 2,  // minimum cores
-  STORAGE: 50 // in GB
-};
+// Track last sync time
+let lastSyncTime = 0;
+let nextSyncAllowed = 0;
 
-// Configure axios instance
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 20000,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json'
   }
 });
 
-// Helper functions
-const log = (msg) => console.error(`[${new Date().toISOString()}] ${msg}`);
-
-// Permission system import and check
-const loadPermissionSystem = async () => {
-  try {
-    const permissionPath = path.resolve(__dirname, '../system/permission.js');
-    const { loadPermission } = await import(permissionPath);
-    const permission = loadPermission();
-    
-    if (!permission.taskPowerEnabled) {
-      log('System Permission Restart');
-      return false;
-    }
-    
-    return permission.taskPowerEnabled;
-  } catch (err) {
-    log(`Permission system error: ${err.message}`);
-    return false;
-  }
+const log = (msg, type = 'info') => {
+  console.error(`[${new Date().toISOString()}] [${type.toUpperCase()}] ${msg}`);
 };
 
-const getSystemMetrics = async () => {
+const getSystemMetrics = () => {
   try {
-    const systemPermission = await loadPermissionSystem();
-    
-    if (!systemPermission) {
-      log('System Permission Restart');
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      return await getSystemMetrics();
-    }
-
     return {
       cpu: os.cpus().length,
-      ram: Math.round(os.totalmem() / (1024 ** 2)), // MB
-      disk: Math.round(diskusage.checkSync('/').free / (1024 ** 3)), // GB
-      speed: 5, // Default Mbps
-      lastSeen: Math.floor(Date.now() / 1000),
-      systemPermission: true
+      ram: Math.round(os.totalmem() / (1024 ** 2)),
+      disk: Math.round(diskusage.checkSync('/').free / (1024 ** 3)),
+      speed: 5,
+      lastSeen: Math.floor(Date.now() / 1000)
     };
   } catch (err) {
-    log(`Metrics error: ${err.message}`);
+    log(`Metrics error: ${err.message}`, 'error');
     return null;
   }
 };
@@ -84,54 +53,87 @@ const saveToken = (token) => {
     fs.writeFileSync(TOKEN_PATH, token);
     log('Mining token saved');
   } catch (err) {
-    log(`Token save failed: ${err.message}`);
+    log(`Token save failed: ${err.message}`, 'error');
+  }
+};
+
+const readNodeId = () => {
+  try {
+    return fs.readFileSync('/root/netrum-lite-node/src/identity/node-id/id.txt', 'utf8').trim();
+  } catch (err) {
+    log(`Node ID read failed: ${err.message}`, 'error');
+    return null;
   }
 };
 
 const syncNode = async () => {
-  try {
-    // 1. Get node ID
-    const nodeId = fs.readFileSync(
-      '/root/netrum-lite-node/src/identity/node-id/id.txt', 
-      'utf8'
-    ).trim();
+  const now = Date.now();
+  
+  // Enforce cooldown strictly
+  if (now < nextSyncAllowed) {
+    const remaining = Math.ceil((nextSyncAllowed - now)/1000);
+    log(`Waiting ${remaining} seconds until next sync`, 'info');
+    return;
+  }
 
-    // 2. Get system metrics with permission check
-    const metrics = await getSystemMetrics();
+  try {
+    const nodeId = readNodeId();
+    if (!nodeId) throw new Error('Empty node ID');
+
+    const metrics = getSystemMetrics();
     if (!metrics) throw new Error('Failed to get metrics');
 
-    // 3. Determine node status
     const isActive = (
-      metrics.cpu >= NODE_REQUIREMENTS.CORES &&
-      metrics.ram >= NODE_REQUIREMENTS.RAM * 1024 &&
-      metrics.disk >= NODE_REQUIREMENTS.STORAGE
+      metrics.cpu >= 2 &&
+      metrics.ram >= 4096 &&
+      metrics.disk >= 50
     );
 
-    // 4. Send to server
     const response = await api.post(SYNC_ENDPOINT, {
       nodeId,
       nodeMetrics: metrics,
       nodeStatus: isActive ? 'Active' : 'InActive'
     });
 
-    // 5. Handle response
     if (response.data?.success) {
-      log(response.data.log || 'Sync successful');
+      lastSyncTime = Date.now();
+      nextSyncAllowed = response.data.nextSyncAllowed || (lastSyncTime + SYNC_COOLDOWN);
+      log(`Sync successful. Next sync at ${new Date(nextSyncAllowed).toISOString()}`);
       if (response.data.miningToken) {
         saveToken(response.data.miningToken);
       }
     }
-
   } catch (err) {
-    if (err.response) {
-      log(`Server error: ${err.response.status} - ${JSON.stringify(err.response.data)}`);
+    if (err.response?.status === 429) {
+      nextSyncAllowed = err.response.data?.nextSyncAllowed || (Date.now() + SYNC_COOLDOWN);
+      const remaining = Math.ceil((nextSyncAllowed - Date.now())/1000);
+      log(`Sync too frequent. Waiting ${remaining} seconds`, 'warn');
     } else {
-      log(`Sync failed: ${err.message}`);
+      log(`Sync failed: ${err.message}`, 'error');
     }
   }
 };
 
-// Start service
-log('Starting Netrum Node Sync');
-syncNode();
-setInterval(syncNode, SYNC_INTERVAL);
+// Start service with precise timing
+const startService = () => {
+  log('Starting Netrum Node Sync with strict 60-second interval');
+  
+  // Initial sync
+  syncNode();
+  
+  // Regular sync every 60 seconds
+  setInterval(() => {
+    const now = Date.now();
+    if (now >= nextSyncAllowed) {
+      syncNode();
+    }
+  }, 10000); // Check every 10 seconds if sync is allowed
+
+  // Cleanup handlers
+  process.on('SIGTERM', () => {
+    log('Service shutting down');
+    process.exit(0);
+  });
+};
+
+startService();

@@ -4,7 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const API_URL = 'https://api.v2.netrumlabs.com/api/node/mining/live-log/';
-const POLL_INTERVAL = 600_000; // 600 seconds
+const POLL_INTERVAL = 600_000; // 600 seconds (10 minutes)
 
 async function loadAddress() {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -21,16 +21,42 @@ function formatTime(seconds = 0) {
 }
 
 function formatTokens(wei = '0') {
-  return (Number(wei) / 1e18).toFixed(6);
+  return (Number(wei) / 1e18).toFixed(8);
+}
+
+function getStatusEmoji(statusType) {
+  switch(statusType) {
+    case 'active': return '✅';
+    case 'claim_pending': return '⏳';
+    case 'inactive': return '⏹️';
+    default: return '❓';
+  }
 }
 
 function formatStatus(info) {
+  const statusEmoji = getStatusEmoji(info.statusType);
+  let statusText;
+  
+  switch(info.statusType) {
+    case 'active':
+      statusText = 'ACTIVE';
+      break;
+    case 'claim_pending':
+      statusText = 'CLAIM PENDING';
+      break;
+    case 'inactive':
+      statusText = 'INACTIVE (30d no claim)';
+      break;
+    default:
+      statusText = 'UNKNOWN';
+  }
+
   return [
     `⏱️ ${formatTime(info.timeRemaining)}`,
-    `${(info.percentComplete).toFixed(2)}%`,
+    `${info.percentComplete.toFixed(2)}%`,
     `Mined: ${formatTokens(info.minedTokens)} NPT`,
     `Speed: ${formatTokens(info.speedPerSec)}/s`,
-    `Status: ${info.isActive ? '✅ ACTIVE' : '❌ INACTIVE'}`
+    `Status: ${statusEmoji} ${statusText}`
   ].join(' | ');
 }
 
@@ -58,9 +84,9 @@ async function pollMiningStatus(address) {
     process.stdout.write('\x1Bc');
     console.log(formatStatus(info));
 
-    // Exit if mining is done
-    if (!info.isActive && info.timeRemaining === 0) {
-      console.log('⏹️ Mining session completed');
+    // Exit if mining is inactive due to 30-day no claim
+    if (info.statusType === 'inactive') {
+      console.log('⏹️ Mining inactive due to 30 days of no claims');
       process.exit(0);
     }
 
