@@ -108,6 +108,9 @@
        netrum-node-id-remove  Clear Node ID
        netrum-node-sign       Sign a message with node key
        netrum-node-register   Register node on-chain
+       netrum-task-allow      Node allow task permission
+       netrum-task            Node TTS task on
+       netrum-task-log        Node TTS task Live logs
        netrum-sync            Sync blockchain data
        netrum-sync-log        Node sync logs
        netrum-mining          Start mining
@@ -140,6 +143,9 @@
 
 
 - **`netrum-node-register` :** Registers your node on-chain and with the backend system. This step requires a small amount of BASE for gas (typically between 0.0002 and 0.0005 BASE).
+
+
+- **`netrum-task` :** The TTS module allows and starts the task.
 
 
 - **`netrum-sync` :** Starts the syncing process between your node and the Netrum network. This keeps your node active and eligible to earn mining rewards.
