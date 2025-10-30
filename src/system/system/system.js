@@ -24,6 +24,14 @@ const MIN_REQUIREMENTS = {
 };
 
 // ========== Helper Functions ==========
+function runCommand(cmd) {
+  try {
+    return execSync(cmd, { stdio: 'pipe' }).toString().trim();
+  } catch (e) {
+    return null;
+  }
+}
+
 function runScript(scriptPath) {
   try {
     execSync(`node ${scriptPath}`, { stdio: 'inherit' });
@@ -42,12 +50,51 @@ function readSpeedData() {
   return { download, upload };
 }
 
+// ========== Auto Speedtest Detection ==========
+function autoSpeedTest() {
+  console.log('📶 Running network speed test...');
+  let result = '';
+  let download = 0;
+  let upload = 0;
+
+  // 1️⃣ Try official Ookla CLI first
+  result = runCommand(`speedtest --accept-license --accept-gdpr --format=json`);
+  if (result) {
+    try {
+      const json = JSON.parse(result);
+      download = (json.download.bandwidth * 8) / 1e6; // bits → Mbps
+      upload = (json.upload.bandwidth * 8) / 1e6;
+    } catch {}
+  }
+
+  // 2️⃣ If fail or upload 0, try fast-cli
+  if (!download || upload === 0) {
+    console.warn('⚠️  Ookla CLI failed or upload = 0, trying fast-cli...');
+    result = runCommand(`npx --yes fast-cli --upload --json`);
+    if (result) {
+      try {
+        const json = JSON.parse(result);
+        download = json.downloadSpeed || download;
+        upload = json.uploadSpeed || upload;
+      } catch {}
+    }
+  }
+
+  // 3️⃣ Still nothing? fallback to default values (safe exit)
+  if (!download) download = 1;
+  if (!upload) upload = 0.1;
+
+  fs.writeFileSync(speedFile, `${download.toFixed(2)} ${upload.toFixed(2)}`);
+  console.log(`✅ Speed Test Completed — Download: ${download.toFixed(2)} Mbps, Upload: ${upload.toFixed(2)} Mbps`);
+  return { download, upload };
+}
+
 // ========== Power Score Calculation ==========
 function calculatePowerScore(download, upload) {
   const cpuCores = os.cpus().length;
   const totalRAM = os.totalmem() / (1024 ** 3); // in GB
   const availableDisk = diskusage.checkSync('/').available / (1024 ** 3); // in GB
-  const freeDiskRounded = Math.floor(availableDisk); // Round down to whole GB
+  const freeDiskRounded = Math.floor(availableDisk);
 
   const power = {
     cpu: Math.min(cpuCores * 10, 40),
@@ -73,17 +120,15 @@ function calculatePowerScore(download, upload) {
 async function fullSystemCheck() {
   console.log('\n🔍 Starting Full System Check...\n');
 
-  // Step 1: Run speed test
-  console.log('📶 [1/3] Running Network Speed Test...');
-  runScript(speedtestPath);
-  const { download, upload } = readSpeedData();
-  console.log(`✅ Speed Test Completed — Download: ${download} Mbps, Upload: ${upload} Mbps\n`);
+  // Step 1: Network test with auto fallback
+  console.log('📶 [1/3] Checking Internet Speed...');
+  const { download, upload } = autoSpeedTest();
 
-  // Step 2: Run system requirement checks
-  console.log('🧠 [2/3] Checking Minimum System Requirements...');
+  // Step 2: System requirements
+  console.log('\n🧠 [2/3] Checking Minimum System Requirements...');
   runScript(requirementsPath);
 
-  // Step 3: Calculate and display power score
+  // Step 3: Power score
   console.log('\n⚡ [3/3] Calculating Node Power Score...');
   const power = calculatePowerScore(download, upload);
 
@@ -104,6 +149,9 @@ async function fullSystemCheck() {
 }
 
 // ========== Start ==========
+fullSystemCheck().catch(err => {
+  console.error('❌ Unexpected error:', err.message);
+});// ========== Start ==========
 fullSystemCheck().catch(err => {
   console.error('❌ Unexpected error:', err.message);
 });
