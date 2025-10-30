@@ -196,7 +196,4 @@ async function fullSystemCheck() {
 // ========== Start ==========
 fullSystemCheck().catch(err => {
   console.error('❌ Unexpected error:', err.message);
-});// ========== Start ==========
-fullSystemCheck().catch(err => {
-  console.error('❌ Unexpected error:', err.message);
 });
