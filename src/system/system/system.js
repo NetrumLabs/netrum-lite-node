@@ -41,15 +41,6 @@ function runScript(scriptPath) {
   }
 }
 
-function readSpeedData() {
-  if (!fs.existsSync(speedFile)) {
-    console.error('❌ Speedtest results not found. Run speedtest.js first.');
-    process.exit(1);
-  }
-  const [download, upload] = fs.readFileSync(speedFile, 'utf8').trim().split(' ').map(parseFloat);
-  return { download, upload };
-}
-
 // ========== Auto Speedtest Detection ==========
 function autoSpeedTest() {
   console.log('📶 Running network speed test...');
@@ -64,7 +55,9 @@ function autoSpeedTest() {
       const json = JSON.parse(result);
       download = (json.download.bandwidth * 8) / 1e6; // bits → Mbps
       upload = (json.upload.bandwidth * 8) / 1e6;
-    } catch {}
+    } catch {
+      console.log('⚠️ Error parsing Ookla JSON output');
+    }
   }
 
   // 2️⃣ If fail or upload 0, try fast-cli
@@ -76,24 +69,30 @@ function autoSpeedTest() {
         const json = JSON.parse(result);
         download = json.downloadSpeed || download;
         upload = json.uploadSpeed || upload;
-      } catch {}
+      } catch {
+        console.log('⚠️ Error parsing fast-cli output');
+      }
     }
   }
 
-  // 3️⃣ Still nothing? fallback to default values (safe exit)
+  // 3️⃣ Still nothing? fallback to default safe values
   if (!download) download = 1;
   if (!upload) upload = 0.1;
 
+  // ✅ Always save results to speedtest.txt
   fs.writeFileSync(speedFile, `${download.toFixed(2)} ${upload.toFixed(2)}`);
+
   console.log(`✅ Speed Test Completed — Download: ${download.toFixed(2)} Mbps, Upload: ${upload.toFixed(2)} Mbps`);
+  console.log(`💾 Results saved to: ${speedFile}`);
+
   return { download, upload };
 }
 
 // ========== Power Score Calculation ==========
 function calculatePowerScore(download, upload) {
   const cpuCores = os.cpus().length;
-  const totalRAM = os.totalmem() / (1024 ** 3); // in GB
-  const availableDisk = diskusage.checkSync('/').available / (1024 ** 3); // in GB
+  const totalRAM = os.totalmem() / (1024 ** 3); // GB
+  const availableDisk = diskusage.checkSync('/').available / (1024 ** 3); // GB
   const freeDiskRounded = Math.floor(availableDisk);
 
   const power = {
@@ -106,6 +105,52 @@ function calculatePowerScore(download, upload) {
     }
   };
 
+  return {
+    ...power,
+    cpuCores,
+    totalRAM: totalRAM.toFixed(1),
+    freeDisk: freeDiskRounded,
+    download,
+    upload
+  };
+}
+
+// ========== Main System Check ==========
+async function fullSystemCheck() {
+  console.log('\n🔍 Starting Full System Check...\n');
+
+  // Step 1: Network test with auto fallback
+  console.log('📶 [1/3] Checking Internet Speed...');
+  const { download, upload } = autoSpeedTest();
+
+  // Step 2: System requirements
+  console.log('\n🧠 [2/3] Checking Minimum System Requirements...');
+  runScript(requirementsPath);
+
+  // Step 3: Power score
+  console.log('\n⚡ [3/3] Calculating Node Power Score...');
+  const power = calculatePowerScore(download, upload);
+
+  console.log(`\n📊 Power Breakdown:`);
+  console.log(`- CPU Power     : ${power.cpu} (${power.cpuCores} cores)`);
+  console.log(`- RAM Power     : ${power.ram} (${power.totalRAM} GB)`);
+  console.log(`- Disk Power    : ${power.disk} (${power.freeDisk} GB Available)`);
+  console.log(`- Network Power : ${power.network} (${power.download}↓ / ${power.upload}↑ Mbps)`);
+
+  console.log(`\n🚀 TOTAL POWER SCORE: ${power.total} / 190\n`);
+
+  if (power.total < 100) {
+    console.log('❌  System does not meet the minimum power requirement of 100.');
+    process.exit(1);
+  } else {
+    console.log('✅  All checks passed! System is ready for Netrum Lite Node operation.');
+  }
+}
+
+// ========== Start ==========
+fullSystemCheck().catch(err => {
+  console.error('❌ Unexpected error:', err.message);
+});
   return {
     ...power,
     cpuCores,
