@@ -1,0 +1,23 @@
+[Unit]
+Description=Netrum Node System Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/netrum-lite-node/src/system/system
+ExecStart=/usr/bin/node /root/netrum-lite-node/src/system/system/system.js
+Restart=on-failure
+RestartSec=180s
+StartLimitIntervalSec=300
+StartLimitBurst=5
+StandardOutput=journal
+StandardError=journal
+Environment=NODE_ENV=production
+Environment=PYTHONUNBUFFERED=1
+Environment=SYNC_INTERVAL=60000
+LogRateLimitIntervalSec=0
+LogRateLimitBurst=0
+
+[Install]
+WantedBy=multi-user.target
