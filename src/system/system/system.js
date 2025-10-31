@@ -26,7 +26,7 @@ const MIN_REQUIREMENTS = {
 // ========== Helper Functions ==========
 function runCommand(cmd) {
   try {
-    return execSync(cmd, { stdio: 'pipe' }).toString().trim();
+    return execSync(cmd, { stdio: 'pipe', timeout: 30000 }).toString().trim();
   } catch (e) {
     return null;
   }
@@ -88,6 +88,19 @@ function autoSpeedTest() {
   return { download, upload };
 }
 
+// ========== Continuous Speed Test ==========
+function startContinuousSpeedTest() {
+  console.log('🔄 Starting continuous speed test (every 3 seconds)...');
+  
+  // Initial test
+  autoSpeedTest();
+  
+  // Continuous test every 3 seconds
+  setInterval(() => {
+    autoSpeedTest();
+  }, 3000);
+}
+
 // ========== Power Score Calculation ==========
 function calculatePowerScore(download, upload) {
   const cpuCores = os.cpus().length;
@@ -119,16 +132,28 @@ function calculatePowerScore(download, upload) {
 async function fullSystemCheck() {
   console.log('\n🔍 Starting Full System Check...\n');
 
-  // Step 1: Network test with auto fallback
-  console.log('📶 [1/3] Checking Internet Speed...');
-  const { download, upload } = autoSpeedTest();
+  // Step 1: Start continuous speed monitoring
+  console.log('📶 [1/3] Starting Continuous Speed Monitoring...');
+  startContinuousSpeedTest();
 
   // Step 2: System requirements
   console.log('\n🧠 [2/3] Checking Minimum System Requirements...');
   runScript(requirementsPath);
 
-  // Step 3: Power score
+  // Step 3: Power score (using latest speed data)
   console.log('\n⚡ [3/3] Calculating Node Power Score...');
+  
+  // Read latest speed from file
+  let download, upload;
+  try {
+    const speedData = fs.readFileSync(speedFile, 'utf8').trim();
+    [download, upload] = speedData.split(' ').map(parseFloat);
+  } catch {
+    // Fallback if file not ready
+    download = 1;
+    upload = 0.1;
+  }
+  
   const power = calculatePowerScore(download, upload);
 
   console.log(`\n📊 Power Breakdown:`);
@@ -144,6 +169,7 @@ async function fullSystemCheck() {
     process.exit(1);
   } else {
     console.log('✅  All checks passed! System is ready for Netrum Lite Node operation.');
+    console.log('📊  Speed test will continue running every 3 seconds...');
   }
 }
 
