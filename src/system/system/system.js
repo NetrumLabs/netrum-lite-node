@@ -19,14 +19,14 @@ const MIN_REQUIREMENTS = {
   RAM: 4,       // GB
   DISK: 50,     // GB
   CPU: 2,       // cores
-  DOWNLOAD: 10, // Mbps
+  DOWNLOAD: 5, // Mbps
   UPLOAD: 5     // Mbps
 };
 
 // ========== Helper Functions ==========
 function runCommand(cmd) {
   try {
-    return execSync(cmd, { stdio: 'pipe', timeout: 30000 }).toString().trim();
+    return execSync(cmd, { stdio: 'pipe' }).toString().trim();
   } catch (e) {
     return null;
   }
@@ -39,6 +39,15 @@ function runScript(scriptPath) {
     console.error(`❌ Error running ${scriptPath}:`, err.message);
     process.exit(1);
   }
+}
+
+function readSpeedData() {
+  if (!fs.existsSync(speedFile)) {
+    console.error('❌ Speedtest results not found. Run speedtest.js first.');
+    process.exit(1);
+  }
+  const [download, upload] = fs.readFileSync(speedFile, 'utf8').trim().split(' ').map(parseFloat);
+  return { download, upload };
 }
 
 // ========== Auto Speedtest Detection ==========
@@ -55,9 +64,7 @@ function autoSpeedTest() {
       const json = JSON.parse(result);
       download = (json.download.bandwidth * 8) / 1e6; // bits → Mbps
       upload = (json.upload.bandwidth * 8) / 1e6;
-    } catch {
-      console.log('⚠️ Error parsing Ookla JSON output');
-    }
+    } catch {}
   }
 
   // 2️⃣ If fail or upload 0, try fast-cli
@@ -69,43 +76,24 @@ function autoSpeedTest() {
         const json = JSON.parse(result);
         download = json.downloadSpeed || download;
         upload = json.uploadSpeed || upload;
-      } catch {
-        console.log('⚠️ Error parsing fast-cli output');
-      }
+      } catch {}
     }
   }
 
-  // 3️⃣ Still nothing? fallback to default safe values
+  // 3️⃣ Still nothing? fallback to default values (safe exit)
   if (!download) download = 1;
   if (!upload) upload = 0.1;
 
-  // ✅ Always save results to speedtest.txt
   fs.writeFileSync(speedFile, `${download.toFixed(2)} ${upload.toFixed(2)}`);
-
   console.log(`✅ Speed Test Completed — Download: ${download.toFixed(2)} Mbps, Upload: ${upload.toFixed(2)} Mbps`);
-  console.log(`💾 Results saved to: ${speedFile}`);
-
   return { download, upload };
-}
-
-// ========== Continuous Speed Test ==========
-function startContinuousSpeedTest() {
-  console.log('🔄 Starting continuous speed test (every 3 seconds)...');
-  
-  // Initial test
-  autoSpeedTest();
-  
-  // Continuous test every 3 seconds
-  setInterval(() => {
-    autoSpeedTest();
-  }, 3000);
 }
 
 // ========== Power Score Calculation ==========
 function calculatePowerScore(download, upload) {
   const cpuCores = os.cpus().length;
-  const totalRAM = os.totalmem() / (1024 ** 3); // GB
-  const availableDisk = diskusage.checkSync('/').available / (1024 ** 3); // GB
+  const totalRAM = os.totalmem() / (1024 ** 3); // in GB
+  const availableDisk = diskusage.checkSync('/').available / (1024 ** 3); // in GB
   const freeDiskRounded = Math.floor(availableDisk);
 
   const power = {
@@ -132,28 +120,16 @@ function calculatePowerScore(download, upload) {
 async function fullSystemCheck() {
   console.log('\n🔍 Starting Full System Check...\n');
 
-  // Step 1: Start continuous speed monitoring
-  console.log('📶 [1/3] Starting Continuous Speed Monitoring...');
-  startContinuousSpeedTest();
+  // Step 1: Network test with auto fallback
+  console.log('📶 [1/3] Checking Internet Speed...');
+  const { download, upload } = autoSpeedTest();
 
   // Step 2: System requirements
   console.log('\n🧠 [2/3] Checking Minimum System Requirements...');
   runScript(requirementsPath);
 
-  // Step 3: Power score (using latest speed data)
+  // Step 3: Power score
   console.log('\n⚡ [3/3] Calculating Node Power Score...');
-  
-  // Read latest speed from file
-  let download, upload;
-  try {
-    const speedData = fs.readFileSync(speedFile, 'utf8').trim();
-    [download, upload] = speedData.split(' ').map(parseFloat);
-  } catch {
-    // Fallback if file not ready
-    download = 1;
-    upload = 0.1;
-  }
-  
   const power = calculatePowerScore(download, upload);
 
   console.log(`\n📊 Power Breakdown:`);
@@ -169,11 +145,13 @@ async function fullSystemCheck() {
     process.exit(1);
   } else {
     console.log('✅  All checks passed! System is ready for Netrum Lite Node operation.');
-    console.log('📊  Speed test will continue running every 3 seconds...');
   }
 }
 
 // ========== Start ==========
+fullSystemCheck().catch(err => {
+  console.error('❌ Unexpected error:', err.message);
+});// ========== Start ==========
 fullSystemCheck().catch(err => {
   console.error('❌ Unexpected error:', err.message);
 });
