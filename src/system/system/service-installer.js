@@ -84,7 +84,6 @@ function showInstructions() {
     
     console.log('\n📊 Log Files:');
     console.log('  Output log  :', logFile);
-    console.log('  Error log   :', errorFile);
 }
 
 /* ── Start Installation ────────────────────────────────── */
