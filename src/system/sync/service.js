@@ -13,15 +13,14 @@ const __dirname = path.dirname(__filename);
 const API_BASE_URL = 'https://api.v2.netrumlabs.com';
 const SYNC_ENDPOINT = '/api/node/metrics/sync';
 const TOKEN_PATH = path.resolve(__dirname, '../mining/miningtoken.txt');
-const SPEED_FILE = path.resolve(__dirname, '../system/speedtest.txt'); // ✅ Same file
-const SYNC_COOLDOWN = 60000;
+const SPEED_FILE = path.resolve(__dirname, '../system/speedtest.txt');
+const SYNC_INTERVAL = 60000; // 1 minute
 
-let lastSyncTime = 0;
-let nextSyncAllowed = 0;
+let isSyncing = false;
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 20000,
+  timeout: 30000, // Increased timeout
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json'
@@ -29,10 +28,10 @@ const api = axios.create({
 });
 
 const log = (msg, type = 'info') => {
-  console.error(`[${new Date().toISOString()}] [${type.toUpperCase()}] ${msg}`);
+  console.log(`[${new Date().toISOString()}] [${type.toUpperCase()}] ${msg}`);
 };
 
-// ✅ SIMPLE: File se speed data read kare
+// ✅ File se latest speed data read kare (har baar fresh)
 const getSpeedFromFile = () => {
   try {
     if (fs.existsSync(SPEED_FILE)) {
@@ -40,7 +39,6 @@ const getSpeedFromFile = () => {
       const [download, upload] = speedData.split(' ').map(parseFloat);
       
       if (download && upload) {
-        log(`Current speed: ${download}↓ / ${upload}↑ Mbps`);
         return { download, upload };
       }
     }
@@ -49,25 +47,25 @@ const getSpeedFromFile = () => {
   }
   
   // Fallback to minimum speeds
-  log('Using minimum speeds', 'warn');
+  log('⚠️ Using minimum speeds', 'warn');
   return { download: 1, upload: 0.1 };
 };
 
 const getSystemMetrics = () => {
   try {
-    const { download, upload } = getSpeedFromFile(); // ✅ File se data
+    const { download, upload } = getSpeedFromFile();
     
     return {
       cpu: os.cpus().length,
       ram: Math.round(os.totalmem() / (1024 ** 2)),
       disk: Math.round(diskusage.checkSync('/').free / (1024 ** 3)),
       speed: download,
-      uploadSpeed: upload, // ✅ Upload speed bhi
+      uploadSpeed: upload,
       lastSeen: Math.floor(Date.now() / 1000),
       systemPermission: true
     };
   } catch (err) {
-    log(`Metrics error: ${err.message}`, 'error');
+    log(`❌ Metrics error: ${err.message}`, 'error');
     return null;
   }
 };
@@ -76,9 +74,9 @@ const saveToken = (token) => {
   try {
     fs.mkdirSync(path.dirname(TOKEN_PATH), { recursive: true });
     fs.writeFileSync(TOKEN_PATH, token);
-    log('Mining token saved');
+    log('✅ Mining token saved');
   } catch (err) {
-    log(`Token save failed: ${err.message}`, 'error');
+    log(`❌ Token save failed: ${err.message}`, 'error');
   }
 };
 
@@ -86,26 +84,32 @@ const readNodeId = () => {
   try {
     return fs.readFileSync('/root/netrum-lite-node/src/identity/node-id/id.txt', 'utf8').trim();
   } catch (err) {
-    log(`Node ID read failed: ${err.message}`, 'error');
+    log(`❌ Node ID read failed: ${err.message}`, 'error');
     return null;
   }
 };
 
 const syncNode = async () => {
-  const now = Date.now();
-  
-  if (now < nextSyncAllowed) {
-    const remaining = Math.ceil((nextSyncAllowed - now)/1000);
-    log(`Waiting ${remaining} seconds until next sync`, 'info');
+  if (isSyncing) {
+    log('⏳ Sync already in progress, skipping...');
     return;
   }
 
+  isSyncing = true;
+  
   try {
     const nodeId = readNodeId();
-    if (!nodeId) throw new Error('Empty node ID');
+    if (!nodeId) {
+      throw new Error('Empty node ID');
+    }
 
+    log('🔄 Starting sync process...');
+    
+    // ✅ Fresh metrics collect kare (including latest speed)
     const metrics = getSystemMetrics();
-    if (!metrics) throw new Error('Failed to get metrics');
+    if (!metrics) {
+      throw new Error('Failed to get metrics');
+    }
 
     // ✅ STRICT VALIDATION with 5 Mbps both
     const isActive = (
@@ -116,7 +120,7 @@ const syncNode = async () => {
       metrics.uploadSpeed >= 5   // 5 Mbps upload
     );
 
-    log(`System Status: ${isActive ? 'ACTIVE' : 'INACTIVE'} | Speed: ${metrics.speed}↓ / ${metrics.uploadSpeed}↑ Mbps`);
+    log(`📈 System Status: ${isActive ? 'ACTIVE' : 'INACTIVE'} | Speed: ${metrics.speed}↓ / ${metrics.uploadSpeed}↑ Mbps`);
 
     const response = await api.post(SYNC_ENDPOINT, {
       nodeId,
@@ -126,43 +130,65 @@ const syncNode = async () => {
     });
 
     if (response.data?.success) {
-      lastSyncTime = Date.now();
-      nextSyncAllowed = response.data.nextSyncAllowed || (lastSyncTime + SYNC_COOLDOWN);
-      log(`Sync successful | Status: ${response.data.syncStatus}`);
+      log(`✅ Sync successful | Status: ${response.data.syncStatus}`);
       
       if (response.data.miningToken) {
         saveToken(response.data.miningToken);
+        log('💰 Mining token received');
       }
+      
+      // ✅ Next sync timing
+      const nextSync = response.data.nextSyncAllowed || SYNC_INTERVAL;
+      log(`⏰ Next sync in: ${Math.round(nextSync/1000)} seconds`);
+      
+    } else {
+      log('❌ Sync response not successful', 'warn');
     }
   } catch (err) {
     if (err.response?.status === 429) {
-      nextSyncAllowed = err.response.data?.nextSyncAllowed || (Date.now() + SYNC_COOLDOWN);
-      const remaining = Math.ceil((nextSyncAllowed - Date.now())/1000);
-      log(`Sync too frequent. Waiting ${remaining} seconds`, 'warn');
+      const retryAfter = err.response.data?.nextSyncAllowed || SYNC_INTERVAL;
+      log(`🚫 Rate limited. Next sync in: ${Math.round(retryAfter/1000)} seconds`, 'warn');
+    } else if (err.code === 'ECONNREFUSED' || err.code === 'ENETUNREACH') {
+      log('🌐 Network error - cannot reach API server', 'error');
+    } else if (err.response?.status >= 500) {
+      log('🔧 Server error - API server issue', 'error');
     } else {
-      log(`Sync failed: ${err.message}`, 'error');
+      log(`❌ Sync failed: ${err.message}`, 'error');
     }
+  } finally {
+    isSyncing = false;
   }
 };
 
 const startService = () => {
-  log('Starting Netrum Node Sync (reading from speedtest.txt)');
+  log('🚀 Starting Netrum Node Sync Service');
+  log(`⏰ Sync interval: ${SYNC_INTERVAL/1000} seconds`);
+  log(`📁 Speed file: ${SPEED_FILE}`);
   
-  // Initial sync
-  syncNode();
+  // ✅ Initial sync
+  setTimeout(() => {
+    syncNode();
+  }, 5000); // 5 second delay for startup
   
-  // Regular sync
+  // ✅ Regular sync every 1 minute
   setInterval(() => {
-    const now = Date.now();
-    if (now >= nextSyncAllowed) {
-      syncNode();
-    }
-  }, 15000);
+    syncNode();
+  }, SYNC_INTERVAL);
 
+  // ✅ Health monitoring
+  setInterval(() => {
+    const { download, upload } = getSpeedFromFile();
+  }, 30000); // Every 30 seconds
+
+  // ✅ Graceful shutdown
   process.on('SIGTERM', () => {
-    log('Service shutting down');
+    process.exit(0);
+  });
+
+  process.on('SIGINT', () => {
     process.exit(0);
   });
 };
 
+// ✅ Start the service
 startService();
