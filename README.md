@@ -98,6 +98,7 @@
        Available Commands:
        netrum-update          Cli Update
        netrum-system          System status & logs
+       netrum-system-log      System Logs
        netrum-new-wallet      Create / new a wallet
        netrum-import-wallet   Create / import a wallet
        netrum-wallet          Create / inspect a wallet
