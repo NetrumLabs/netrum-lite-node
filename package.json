@@ -7,6 +7,7 @@
     "netrum": "./cli/netrum-cli.js",
     "netrum-update": "./cli/cli.js",
     "netrum-system": "./cli/system-cli.js",
+    "netrum-system-log": "./cli/system-log-cli.js",
     "netrum-new-wallet": "./cli/new-wallet-cli.js",
     "netrum-import-wallet": "./cli/import-wallet-cli.js",
     "netrum-wallet": "./cli/wallet-cli.js",
