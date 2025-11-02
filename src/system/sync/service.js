@@ -55,10 +55,13 @@ const getSystemMetrics = () => {
   try {
     const { download, upload } = getSpeedFromFile();
     
+    const totalMemGB = Math.round(os.totalmem() / (1024 ** 3)); // Convert to GB
+    const freeDiskGB = Math.round(diskusage.checkSync('/').free / (1024 ** 3));
+    
     return {
       cpu: os.cpus().length,
-      ram: Math.round(os.totalmem() / (1024 ** 2)),
-      disk: Math.round(diskusage.checkSync('/').free / (1024 ** 3)),
+      ram: Math.round(os.totalmem() / (1024 ** 2)), // Keep as MB for server conversion
+      disk: freeDiskGB,
       speed: download,
       uploadSpeed: upload,
       lastSeen: Math.floor(Date.now() / 1000),
@@ -103,76 +106,94 @@ const syncNode = async () => {
       throw new Error('Empty node ID');
     }
 
-    log('🔄 Starting sync process...');
+    log(`🔍 Node ID: ${nodeId}`);
     
     const metrics = getSystemMetrics();
     if (!metrics) {
       throw new Error('Failed to get metrics');
     }
 
+    // Debug logging - Server requirements vs actual
+    log(`📊 Server Requirements: CPU: 2+ cores, RAM: 4GB (4096MB), Disk: 50GB, Speed: 5+ Mbps`);
+    log(`📊 Actual Metrics: CPU: ${metrics.cpu} cores, RAM: ${metrics.ram}MB (${Math.round(metrics.ram/1024)}GB), Disk: ${metrics.disk}GB, Speed: ${metrics.speed}↓/${metrics.uploadSpeed}↑ Mbps`);
+
     const isActive = (
       metrics.cpu >= 2 &&
-      metrics.ram >= 4096 &&
+      metrics.ram >= 4096 &&  // 4GB in MB
       metrics.disk >= 50 &&
       metrics.speed >= 5 &&
       metrics.uploadSpeed >= 5
     );
 
-    log(`📈 System Status: ${isActive ? 'ACTIVE' : 'INACTIVE'} | Speed: ${metrics.speed}↓ / ${metrics.uploadSpeed}↑ Mbps`);
+    log(`📈 System Status: ${isActive ? 'ACTIVE' : 'INACTIVE'}`);
 
-    const response = await api.post(SYNC_ENDPOINT, {
+    const payload = {
       nodeId,
       nodeMetrics: metrics,
       syncStatus: isActive ? 'Active' : 'InActive',
       systemPermission: true
-    });
+    };
 
-    if (response.data?.success) {
-      log(`✅ Sync successful | Status: ${response.data.syncStatus}`);
-      
-      if (response.data.miningToken) {
-        saveToken(response.data.miningToken);
-        log('💰 Mining token received');
-      }
-      
-      // ✅ FIXED: Proper next sync calculation
-      let nextSyncInSeconds = 60; // Default 1 minute
-      
-      if (response.data.nextSyncAllowed) {
-        // Agar timestamp format hai (like 1761918004)
-        if (response.data.nextSyncAllowed > 1000000000) { 
-          // Assume it's a Unix timestamp (seconds)
-          const now = Math.floor(Date.now() / 1000);
-          nextSyncInSeconds = response.data.nextSyncAllowed - now;
+    log(`📤 Sending payload to: ${API_BASE_URL}${SYNC_ENDPOINT}`);
+
+    const response = await api.post(SYNC_ENDPOINT, payload);
+
+    // COMPLETE RESPONSE ANALYSIS
+    log(`📥 Raw API Response: ${JSON.stringify(response.data)}`);
+
+    if (response.data) {
+      if (response.data.success === true) {
+        log(`✅ Sync successful | Status: ${response.data.syncStatus}`);
+        
+        if (response.data.miningToken) {
+          saveToken(response.data.miningToken);
+          log('💰 Mining token received');
         } else {
-          // Assume it's already in seconds
-          nextSyncInSeconds = response.data.nextSyncAllowed;
+          log('⚠️ No mining token received - may not meet requirements', 'warn');
         }
         
-        // Ensure it's reasonable (max 5 minutes)
-        nextSyncInSeconds = Math.min(nextSyncInSeconds, 300);
+        if (response.data.log) {
+          log(`💬 Server log: ${response.data.log}`);
+        }
+        
+        // Next sync timing
+        if (response.data.nextSyncAllowed) {
+          const nextSync = Math.max(60000, response.data.nextSyncAllowed - Date.now());
+          log(`⏰ Next sync in: ${Math.round(nextSync/1000)} seconds`);
+        }
+        
+      } else {
+        log(`❌ API returned success: false | Error: ${response.data.error || 'Unknown error'}`, 'warn');
       }
-      
-      log(`⏰ Next sync in: ${nextSyncInSeconds} seconds`);
-      
     } else {
-      log('❌ Sync response not successful', 'warn');
+      log('❌ Empty response from API', 'error');
     }
+
   } catch (err) {
-    if (err.response?.status === 429) {
-      log(`🚫 Rate limited. Next sync in: 60 seconds`, 'warn');
-    } else if (err.code === 'ECONNREFUSED' || err.code === 'ENETUNREACH') {
-      log('🌐 Network error - cannot reach API server', 'error');
-    } else if (err.response?.status >= 500) {
-      log('🔧 Server error - API server issue', 'error');
+    // ENHANCED ERROR HANDLING
+    if (err.response) {
+      log(`❌ API Error ${err.response.status}: ${JSON.stringify(err.response.data)}`, 'error');
+      
+      if (err.response.status === 400) {
+        log('🔍 Bad request - check node ID format', 'error');
+      } else if (err.response.status === 403) {
+        log('🚫 System permission denied', 'error');
+      } else if (err.response.status === 404) {
+        log('🔍 Node not registered', 'error');
+      } else if (err.response.status === 429) {
+        const waitTime = err.response.data?.nextSyncAllowed ? 
+          Math.round((err.response.data.nextSyncAllowed - Date.now())/1000) : 60;
+        log(`⏰ Rate limited - wait ${waitTime} seconds`, 'warn');
+      }
+    } else if (err.request) {
+      log('🌐 Network error - no response from server', 'error');
     } else {
-      log(`❌ Sync failed: ${err.message}`, 'error');
+      log(`💥 Unexpected error: ${err.message}`, 'error');
     }
   } finally {
     isSyncing = false;
   }
 };
-
 const startService = () => {
   log('🚀 Starting Netrum Node Sync Service');
   log(`⏰ Sync interval: ${SYNC_INTERVAL/1000} seconds`);
