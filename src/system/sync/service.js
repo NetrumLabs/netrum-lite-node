@@ -134,12 +134,12 @@ const syncNode = async () => {
       systemPermission: true
     };
 
-    log(`📤 Sending payload to: ${API_BASE_URL}${SYNC_ENDPOINT}`);
+   // log(`📤 Sending payload to: ${API_BASE_URL}${SYNC_ENDPOINT}`);
 
     const response = await api.post(SYNC_ENDPOINT, payload);
 
     // COMPLETE RESPONSE ANALYSIS
-    log(`📥 Raw API Response: ${JSON.stringify(response.data)}`);
+   // log(`📥 Raw API Response: ${JSON.stringify(response.data)}`);
 
     if (response.data) {
       if (response.data.success === true) {
@@ -153,7 +153,7 @@ const syncNode = async () => {
         }
         
         if (response.data.log) {
-          log(`💬 Server log: ${response.data.log}`);
+      //    log(`💬 Server log: ${response.data.log}`);
         }
         
         // Next sync timing
