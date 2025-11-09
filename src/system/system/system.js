@@ -13,6 +13,7 @@ const __dirname = path.dirname(__filename);
 const speedtestPath = path.join(__dirname, 'speedtest.js');
 const requirementsPath = path.join(__dirname, 'requirements.js');
 const speedFile = path.join(__dirname, 'speedtest.txt');
+const logFile = path.join(__dirname, 'speedtest_log.txt');
 
 // ========== Minimum Requirements ==========
 const MIN_REQUIREMENTS = {
@@ -24,15 +25,10 @@ const MIN_REQUIREMENTS = {
 };
 
 // ========== Helper Function ==========
-function runCommand(cmd, timeout = 45000) {
+function runCommand(cmd, timeout = 60000) {
   try {
-    return execSync(cmd, {
-      stdio: 'pipe',
-      timeout: timeout,
-      encoding: 'utf8'
-    }).trim();
-  } catch (e) {
-    console.log(`⚠️ Command failed: ${cmd}`);
+    return execSync(cmd, { stdio: 'pipe', timeout, encoding: 'utf8' }).trim();
+  } catch {
     return null;
   }
 }
@@ -48,91 +44,52 @@ function runScript(scriptPath) {
 
 // ========== Speedtest Function ==========
 function autoSpeedTest() {
-  console.log('\n📶 Running network speed test...');
+  console.clear();
+  console.log(`\n📶 Running Network Speed Test at ${new Date().toLocaleString()}`);
+
   let download = 0;
   let upload = 0;
   let success = false;
 
   // 1️⃣ Try Ookla CLI
-  console.log('🔧 Trying Ookla speedtest...');
-  let result = runCommand(`speedtest --accept-license --accept-gdpr --format=json`, 60000);
+  const result = runCommand(`speedtest --accept-license --accept-gdpr --format=json`);
 
   if (result) {
     try {
       const json = JSON.parse(result);
       download = (json.download.bandwidth * 8) / 1e6;
       upload = (json.upload.bandwidth * 8) / 1e6;
-      console.log(`✅ Ookla: ${download.toFixed(2)}↓ / ${upload.toFixed(2)}↑ Mbps`);
       success = true;
-    } catch {
-      console.log('⚠️ JSON parse failed for Ookla output.');
-    }
+    } catch {}
   }
 
-  // 2️⃣ Fallback: fast-cli
-  if (!success || download === 0) {
-    console.log('🔄 Trying fast-cli...');
-    result = runCommand(`npx --yes fast-cli --upload --json --timeout 45000`, 60000);
-
-    if (result) {
-      try {
-        const json = JSON.parse(result);
-        download = json.downloadSpeed || 0;
-        upload = json.uploadSpeed || 0;
-        console.log(`✅ Fast-cli: ${download.toFixed(2)}↓ / ${upload.toFixed(2)}↑ Mbps`);
-        success = true;
-      } catch {
-        console.log('⚠️ fast-cli parse failed.');
-      }
-    }
-  }
-
-  // 3️⃣ Final fallback: direct text parsing
-  if (!success || download === 0) {
-    console.log('🔄 Trying direct speedtest command...');
-    result = runCommand(`speedtest --accept-license --accept-gdpr`, 60000);
-
-    if (result) {
-      const lines = result.split('\n');
-      for (const line of lines) {
-        if (line.includes('Download:')) {
-          const match = line.match(/Download:\s+([\d.]+)\s+Mbit\/s/);
-          if (match) download = parseFloat(match[1]);
-        }
-        if (line.includes('Upload:')) {
-          const match = line.match(/Upload:\s+([\d.]+)\s+Mbit\/s/);
-          if (match) upload = parseFloat(match[1]);
-        }
-      }
-      if (download > 0) {
-        console.log(`✅ Direct: ${download.toFixed(2)}↓ / ${upload.toFixed(2)}↑ Mbps`);
-        success = true;
-      }
-    }
-  }
-
-  // 4️⃣ Fallback to minimum values
-  if (!success || download === 0) {
-    console.log('⚠️ All methods failed, using fallback values.');
+  if (!success) {
+    console.log('⚠️ Failed to fetch valid speed data. Using fallback values.');
     download = 1;
     upload = 0.1;
   }
 
-  // Save to file
-  fs.writeFileSync(speedFile, `${download.toFixed(2)} ${upload.toFixed(2)}`);
-  console.log(`💾 Saved: ${download.toFixed(2)}↓ / ${upload.toFixed(2)}↑ Mbps`);
+  const timestamp = new Date().toLocaleString();
+  const dataLine = `[${timestamp}] Download: ${download.toFixed(2)} Mbps | Upload: ${upload.toFixed(2)} Mbps\n`;
+
+  // Save to files
+  fs.writeFileSync(speedFile, dataLine);
+  fs.appendFileSync(logFile, dataLine);
+
+  console.log(`✅ Saved at ${timestamp}`);
+  console.log(`📊 ${download.toFixed(2)}↓ / ${upload.toFixed(2)}↑ Mbps\n`);
 
   return { download, upload };
 }
 
-// ========== Continuous Speed Test ==========
+// ========== Continuous Speed Test (1 minute interval) ==========
 function startContinuousSpeedTest() {
-  console.log('\n🔁 Continuous speed test (every 30s)...');
+  console.log('\n🔁 Continuous speed test running every 1 minute...');
   autoSpeedTest();
+
   setInterval(() => {
-    console.log('\n🔄 Running scheduled test...');
     autoSpeedTest();
-  }, 30000);
+  }, 60000);
 }
 
 // ========== Power Score Calculation ==========
@@ -190,7 +147,7 @@ async function fullSystemCheck() {
     process.exit(1);
   } else {
     console.log('✅ System is ready for Netrum Lite Node operation.');
-    console.log('📊 Continuous speed test running...');
+    console.log('📊 Continuous speed test running every 1 minute...');
     startContinuousSpeedTest();
   }
 }
