@@ -10,7 +10,7 @@ import diskusage from 'diskusage';
 // ========== Path Setup ==========
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const speedFile = path.join(__dirname, 'speed.txt');
+const speedFile = path.join(__dirname, 'speedtest.txt');
 const logFile = path.join(__dirname, 'speedtest_log.txt');
 const requirementsPath = path.join(__dirname, 'requirements.js');
 
