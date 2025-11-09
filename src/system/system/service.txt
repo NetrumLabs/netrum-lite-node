@@ -1,7 +1,7 @@
 [Unit]
 Description=Netrum Node System Service - Auto Refresh Every 1 Minute
-After=network.target
-Wants=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
@@ -9,17 +9,19 @@ User=root
 WorkingDirectory=/root/netrum-lite-node/src/system/system
 ExecStart=/usr/bin/node /root/netrum-lite-node/src/system/system/system.js
 Restart=always
-RestartSec=60s
-StartLimitIntervalSec=300
+RestartSec=5s
+StartLimitIntervalSec=60
 StartLimitBurst=10
 StandardOutput=journal
 StandardError=journal
+
+# Environment Variables
 Environment=NODE_ENV=production
 Environment=PYTHONUNBUFFERED=1
-Environment=SPEED_TEST_INTERVAL=30000
+Environment=SPEED_TEST_INTERVAL=60000
 
-# Auto-restart every 1 minute to refresh speed data
-RuntimeMaxSec=60
+# Limit service run to 65 seconds max (refresh every minute)
+RuntimeMaxSec=65
 
 [Install]
 WantedBy=multi-user.target
