@@ -10,7 +10,7 @@ import diskusage from 'diskusage';
 // ========== Path Setup ==========
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const speedFile = path.join(__dirname, 'speed.txt');   // fixed name
+const speedFile = path.join(__dirname, 'speed.txt');
 const logFile = path.join(__dirname, 'speedtest_log.txt');
 const requirementsPath = path.join(__dirname, 'requirements.js');
 
@@ -56,7 +56,6 @@ function autoSpeedTest() {
       const json = JSON.parse(result);
       download = (json.download?.bandwidth * 8) / 1e6 || 0;
       upload = (json.upload?.bandwidth * 8) / 1e6 || 0;
-
       if (download > 0 && upload > 0) success = true;
     } catch (e) {
       console.log('⚠️ JSON parse failed:', e.message);
@@ -88,14 +87,11 @@ function autoSpeedTest() {
   return { download, upload };
 }
 
-// ========== Continuous Speed Test (every 1 minute) ==========
+// ========== Continuous Speed Test ==========
 function startContinuousSpeedTest() {
   console.log('\n🔁 Continuous speed test running every 1 minute...');
   autoSpeedTest();
-
-  setInterval(() => {
-    autoSpeedTest();
-  }, 60000);
+  setInterval(autoSpeedTest, 60000);
 }
 
 // ========== Power Score ==========
@@ -144,7 +140,6 @@ async function fullSystemCheck() {
   console.log(`- RAM Power     : ${power.ram} (${power.totalRAM} GB)`);
   console.log(`- Disk Power    : ${power.disk} (${power.freeDisk} GB Free)`);
   console.log(`- Network Power : ${power.network} (${power.download.toFixed(2)}↓ / ${power.upload.toFixed(2)}↑ Mbps)`);
-
   console.log(`\n🚀 TOTAL POWER SCORE: ${power.total} / 190\n`);
 
   if (power.total < 100) {
@@ -152,59 +147,6 @@ async function fullSystemCheck() {
     process.exit(1);
   } else {
     console.log('✅ System ready for Netrum Lite Node operation.');
-    startContinuousSpeedTest();
-  }
-}
-
-// ========== Start ==========
-fullSystemCheck().catch(err => {
-  console.error('❌ Unexpected error:', err.message);
-  process.exit(1);
-});    network: Math.min(download * 2 + upload, 50),
-  };
-
-  const total = power.cpu + power.ram + power.disk + power.network;
-
-  return {
-    ...power,
-    total,
-    cpuCores,
-    totalRAM: totalRAM.toFixed(1),
-    freeDisk: freeDiskRounded,
-    download,
-    upload
-  };
-}
-
-// ========== Full System Check ==========
-async function fullSystemCheck() {
-  console.log('\n🔍 Starting Full System Check...\n');
-
-  // Step 1: Internet Speed
-  const { download, upload } = autoSpeedTest();
-
-  // Step 2: Minimum Requirements
-  console.log('\n🧠 Checking System Requirements...');
-  runScript(requirementsPath);
-
-  // Step 3: Power Score
-  console.log('\n⚡ Calculating Node Power...');
-  const power = calculatePowerScore(download, upload);
-
-  console.log(`\n📊 Power Breakdown:`);
-  console.log(`- CPU Power     : ${power.cpu} (${power.cpuCores} cores)`);
-  console.log(`- RAM Power     : ${power.ram} (${power.totalRAM} GB)`);
-  console.log(`- Disk Power    : ${power.disk} (${power.freeDisk} GB Free)`);
-  console.log(`- Network Power : ${power.network} (${power.download.toFixed(2)}↓ / ${power.upload.toFixed(2)}↑ Mbps)`);
-
-  console.log(`\n🚀 TOTAL POWER SCORE: ${power.total} / 190\n`);
-
-  if (power.total < 100) {
-    console.log('❌ System does not meet the minimum power requirement (100).');
-    process.exit(1);
-  } else {
-    console.log('✅ System is ready for Netrum Lite Node operation.');
-    console.log('📊 Continuous speed test running every 1 minute...');
     startContinuousSpeedTest();
   }
 }
