@@ -8,9 +8,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Configuration
-const API_BASE_URL = 'https://api.v2.netrumlabs.com';
-const AUTH_CODE_URL = '/api/node/polling/getAuthCode';
-const TASK_PROVIDER_URL = '/api/node/polling/taskProvider';
+const API_BASE_URL = 'https://node.netrumlabs.dev';
+const AUTH_CODE_URL = '/polling/get-auth-code';
+const TASK_PROVIDER_URL = '/polling/taskProvider';
 
 // File paths
 const MINING_TOKEN_PATH = path.resolve(__dirname, '../system/mining/miningtoken.txt');
