@@ -7,7 +7,7 @@ import fs from 'fs/promises';
 import readline from 'readline/promises';
 
 // Configuration
-const API_URL = 'https://api.v2.netrumlabs.com/api/node/mining/claim/';
+const API_URL = 'https://node.netrumlabs.dev/claim/claim-tokens';
 const RPC_URL = 'https://mainnet.base.org';
 const CHAIN_ID = 8453;
 
