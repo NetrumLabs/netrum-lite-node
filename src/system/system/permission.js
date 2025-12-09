@@ -25,8 +25,8 @@ const DEFAULT_PERMISSION = {
 };
 
 // API configuration
-const API_BASE_URL = 'https://api.v2.netrumlabs.com';
-const ENABLE_RAM_URL = '/api/node/polling/enable-ram';
+const API_BASE_URL = 'https://node.netrumlabs.dev';
+const ENABLE_RAM_URL = '/enable-ram/enable-ram';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
