@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-const API_URL = 'https://node.netrumlabs.dev/live-log/live-log';
+const API_URL = 'https://node.netrumlabs.dev/live-log';
 const POLL_INTERVAL = 600_000; // 600 seconds (10 minutes)
 
 async function loadAddress() {
