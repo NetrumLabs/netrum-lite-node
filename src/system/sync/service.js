@@ -10,8 +10,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Configuration
-const API_BASE_URL = 'https://api.v2.netrumlabs.com';
-const SYNC_ENDPOINT = '/api/node/metrics/sync';
+const API_BASE_URL = 'https://node.netrumlabs.dev';
+const SYNC_ENDPOINT = '/metrics/sync';
 const TOKEN_PATH = path.resolve(__dirname, '../mining/miningtoken.txt');
 const SPEED_FILE = path.resolve(__dirname, '../system/speedtest.txt');
 const SYNC_INTERVAL = 60000; // 1 minute
