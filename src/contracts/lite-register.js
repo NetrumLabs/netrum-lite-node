@@ -12,7 +12,7 @@ const __dirname = path.dirname(__filename);
 
 // ✅  Configuration
 const RPC_URL = "https://mainnet.base.org/";
-const API_URL = "https://api.v2.netrumlabs.com/api/node/register-node/register-api/"; // FIX THIS URL
+const API_URL = "https://node.netrumlabs.dev/register/register-node"; // FIX THIS URL
 const CONTRACT_ADDRESS = "0x23b67235Cf602CC6793C45dA86E6DB2246220702";
 
 // ✅  File Paths
