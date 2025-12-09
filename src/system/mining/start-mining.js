@@ -5,7 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 /* ---------- config ---------- */
-const API_URL = 'https://api.v2.netrumlabs.com/api/node/mining/start-mining/';
+const API_URL = 'https://node.netrumlabs.dev/mining/start-mining';
 const RPC_URL = 'https://mainnet.base.org';
 const CHAIN_ID = 8453;               // Base Mainnet
 const DELAY_MS = 60000;              // ⏱️ Delay before API call in milliseconds
