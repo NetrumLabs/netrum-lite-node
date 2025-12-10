@@ -11,6 +11,7 @@ const __dirname = path.dirname(__filename);
 const API_BASE_URL = 'https://node.netrumlabs.dev';
 const AUTH_CODE_URL = '/polling/get-auth-code';
 const TASK_PROVIDER_URL = '/polling/taskProvider';
+const TASK_COMPLETION_URL = '/polling/taskCompletion';
 
 // File paths
 const MINING_TOKEN_PATH = path.resolve(__dirname, '../system/mining/miningtoken.txt');
@@ -166,12 +167,13 @@ const completeTaskOnServer = async (taskId, nodeId, status, taskCategory) => {
       return false;
     }
 
-    const response = await api.put(TASK_PROVIDER_URL, {
+    // ✅ Use TASK_COMPLETION_URL instead of TASK_PROVIDER_URL
+    const response = await api.put(TASK_COMPLETION_URL, {
       taskId,
       nodeId,
       status,
       taskCategory,
-      authCode,  // ✅ Encrypted code for completion
+      authCode,
       result: taskCategory === 'BLANK_TASK' ? 'blank_task_completed' : 'tts_processing_completed'
     });
 
