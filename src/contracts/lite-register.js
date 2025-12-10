@@ -69,7 +69,6 @@ async function registerLiteNode() {
       body: JSON.stringify({
         nodeId,
         signerAddress,
-        wallet: wallet.address,
         timestamp,
         signature,
         nodeType: 'lite'
