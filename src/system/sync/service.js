@@ -15,13 +15,13 @@ const SYNC_ENDPOINT = "/metrics/sync";
 const TOKEN_PATH = path.resolve(__dirname, "../mining/miningtoken.txt");
 const SPEED_FILE = path.resolve(__dirname, "../system/speedtest.txt");
 
-// Interval (65 sec = ZERO rate limit issues)
-const SYNC_INTERVAL = 65000;
+// Interval (5 minutes = ZERO rate limit issues)
+const SYNC_INTERVAL = 302000; 
 
 // Axios settings
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 60000, // 60 sec timeout
+  timeout: 302000, // 300 sec timeout
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",
@@ -106,20 +106,20 @@ const readNodeId = () => {
 };
 
 // ------------------------
-// COUNTDOWN TIMER (Every 25 sec update)
+// COUNTDOWN TIMER (Every 50 sec update)
 // ------------------------
 let countdown = SYNC_INTERVAL / 1000;
 
 const startCountdown = () => {
   countdown = SYNC_INTERVAL / 1000;
   const timer = setInterval(() => {
-    countdown -= 25;
+    countdown -= 50;
     if (countdown <= 0) {
       clearInterval(timer);
     } else {
       log(`⏳ Next sync in ${countdown} seconds...`);
     }
-  }, 25000);
+  }, 50000);
 };
 
 // ------------------------
