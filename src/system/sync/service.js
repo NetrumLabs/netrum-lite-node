@@ -15,20 +15,21 @@ const SYNC_ENDPOINT = "/metrics/sync";
 const TOKEN_PATH = path.resolve(__dirname, "../mining/miningtoken.txt");
 const SPEED_FILE = path.resolve(__dirname, "../system/speedtest.txt");
 
-// Interval (5 minutes = ZERO rate limit issues)
-const SYNC_INTERVAL = 302000; 
+// DEFAULT interval (fallback = 5 min)
+const DEFAULT_SYNC_INTERVAL = 300000; 
+let dynamicInterval = DEFAULT_SYNC_INTERVAL;
 
 // Axios settings
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 302000, // 300 sec timeout
+  timeout: 310000, // safe timeout
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",
   },
 });
 
-// Logging function with light emoji
+// Logging
 const log = (msg) => {
   console.log(`🕒 [${new Date().toISOString()}] ${msg}`);
 };
@@ -50,7 +51,6 @@ const getSpeedFromFile = () => {
     log(`⚠️ Speed file error: ${e.message}`);
   }
 
-  // fallback
   return { download: 1, upload: 0.1 };
 };
 
@@ -99,27 +99,28 @@ const readNodeId = () => {
       "/root/netrum-lite-node/src/identity/node-id/id.txt",
       "utf8"
     ).trim();
-  } catch (err) {
-    log(`❌ Node ID read failed: ${err.message}`);
+  } catch {
+    log("❌ Node ID read failed");
     return null;
   }
 };
 
 // ------------------------
-// COUNTDOWN TIMER (Every 50 sec update)
+// COUNTDOWN TIMER
 // ------------------------
-let countdown = SYNC_INTERVAL / 1000;
+let countdown = DEFAULT_SYNC_INTERVAL / 1000;
 
-const startCountdown = () => {
-  countdown = SYNC_INTERVAL / 1000;
+const startCountdown = (intervalMs) => {
+  countdown = Math.round(intervalMs / 1000);
+
   const timer = setInterval(() => {
-    countdown -= 50;
+    countdown -= 30;
     if (countdown <= 0) {
       clearInterval(timer);
     } else {
       log(`⏳ Next sync in ${countdown} seconds...`);
     }
-  }, 50000);
+  }, 30000);
 };
 
 // ------------------------
@@ -128,18 +129,12 @@ const startCountdown = () => {
 const syncNode = async () => {
   try {
     const nodeId = readNodeId();
-    if (!nodeId) {
-      log("❌ No Node ID found");
-      return;
-    }
+    if (!nodeId) return;
 
     log(`🧩 Node ID: ${nodeId}`);
 
     const metrics = getSystemMetrics();
-    if (!metrics) {
-      log("❌ Metrics load failed");
-      return;
-    }
+    if (!metrics) return;
 
     const isActive =
       metrics.cpu >= 2 &&
@@ -163,62 +158,50 @@ const syncNode = async () => {
     if (response.data?.success) {
       log(`✅ Sync Success — Status: ${response.data.syncStatus}`);
 
+      // Save token if exists
       if (response.data.miningToken) {
         saveToken(response.data.miningToken);
         log("🎉 Mining token received!");
-      } else {
-        log("ℹ️ No mining token this time");
       }
+
+      // ---------- DYNAMIC INTERVAL LOGIC ----------
+      const now = Date.now();
+      const nextAllowed = response.data?.nextSyncAllowed;
+
+      if (nextAllowed && nextAllowed > now) {
+        dynamicInterval = nextAllowed - now + 2000; // extra 2 second buffer
+        log(`⏳ Dynamic next sync after ${Math.round(dynamicInterval / 1000)} sec`);
+      } else {
+        dynamicInterval = DEFAULT_SYNC_INTERVAL;
+      }
+      // --------------------------------------------
 
       if (response.data.log) log(`📘 Server: ${response.data.log}`);
-    } else {
-      log(`⚠️ Sync failed: ${response.data?.error || "Unknown"}`);
     }
-  } catch (err) {
-    if (err.response) {
-      const s = err.response.status;
-      const d = err.response.data;
 
-      if (s === 429) {
-        const t = d?.detail?.remainingMs
-          ? Math.round(d.detail.remainingMs / 1000)
-          : 60;
-        log(`⛔ Rate limited — wait ${t} seconds`);
-      } else if (s === 404) {
-        log("❌ Node not registered");
-      } else if (s === 403) {
-        log("🔐 Permission denied");
-      } else if (s === 500) {
-        log(`🔥 Server Error 500: ${JSON.stringify(d)}`);
-      } else {
-        log(`⚠️ Server error ${s}: ${JSON.stringify(d)}`);
-      }
-    } else if (err.code === "ECONNABORTED") {
-      log("⏳ Request timeout — retrying next cycle");
-    } else {
-      log(`❌ Error: ${err.message}`);
-    }
+  } catch (err) {
+    log(`❌ Sync error: ${err?.response?.status || err.message}`);
+    dynamicInterval = DEFAULT_SYNC_INTERVAL; // fallback
   }
+};
+
+// ------------------------
+// DYNAMIC LOOP
+// ------------------------
+const runDynamicLoop = async () => {
+  await syncNode();
+  startCountdown(dynamicInterval);
+  setTimeout(runDynamicLoop, dynamicInterval);
 };
 
 // ------------------------
 // START SERVICE
 // ------------------------
 const startService = () => {
-  log("🚀 Starting Netrum Node Sync Service");
-  log(`🔁 Sync interval: ${SYNC_INTERVAL / 1000} seconds`);
+  log("🚀 Starting Netrum Node Sync Service (Dynamic Mode)");
 
-  // Initial sync after 10 sec
-  setTimeout(() => {
-    syncNode();
-    startCountdown();
-  }, 10000);
-
-  // Regular sync loop
-  setInterval(() => {
-    syncNode();
-    startCountdown();
-  }, SYNC_INTERVAL);
+  // First sync after 10 sec
+  setTimeout(runDynamicLoop, 10000);
 
   process.on("SIGTERM", () => process.exit(0));
   process.on("SIGINT", () => process.exit(0));
