@@ -14,13 +14,18 @@ const API_BASE_URL = 'https://node.netrumlabs.dev';
 const SYNC_ENDPOINT = '/metrics/sync';
 const TOKEN_PATH = path.resolve(__dirname, '../mining/miningtoken.txt');
 const SPEED_FILE = path.resolve(__dirname, '../system/speedtest.txt');
-const SYNC_INTERVAL = 60000; // 1 minute
+const BASE_SYNC_INTERVAL = 62000; 
+const SYNC_BUFFER = 3000; // Extra buffer for safety
 
+// State management
 let isSyncing = false;
+let syncTimeout = null;
+let consecutiveErrors = 0;
+const MAX_CONSECUTIVE_ERRORS = 5;
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000, // Increased timeout
+  timeout: 45000, // 45 seconds timeout
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json'
@@ -28,17 +33,20 @@ const api = axios.create({
 });
 
 const log = (msg, type = 'info') => {
-  console.log(`[${new Date().toISOString()}] [${type.toUpperCase()}] ${msg}`);
+  const timestamp = new Date().toISOString();
+  const level = type.toUpperCase();
+  console.log(`[${timestamp}] [${level}] ${msg}`);
 };
 
-// ✅ File se latest speed data read kare (har baar fresh)
+// ✅ File se latest speed data read
 const getSpeedFromFile = () => {
   try {
     if (fs.existsSync(SPEED_FILE)) {
       const speedData = fs.readFileSync(SPEED_FILE, 'utf8').trim();
       const [download, upload] = speedData.split(' ').map(parseFloat);
       
-      if (download && upload) {
+      if (!isNaN(download) && !isNaN(upload) && download > 0 && upload > 0) {
+        log(`📊 Speed file read: ${download}↓/${upload}↑ Mbps`, 'debug');
         return { download, upload };
       }
     }
@@ -55,17 +63,43 @@ const getSystemMetrics = () => {
   try {
     const { download, upload } = getSpeedFromFile();
     
-    const totalMemGB = Math.round(os.totalmem() / (1024 ** 3)); // Convert to GB
-    const freeDiskGB = Math.round(diskusage.checkSync('/').free / (1024 ** 3));
+    // Get memory stats
+    const totalMemBytes = os.totalmem();
+    const freeMemBytes = os.freemem();
+    const totalMemGB = Math.round(totalMemBytes / (1024 ** 3));
+    const freeMemGB = Math.round(freeMemBytes / (1024 ** 3));
+    
+    // Get disk stats
+    const diskInfo = diskusage.checkSync('/');
+    const totalDiskGB = Math.round(diskInfo.total / (1024 ** 3));
+    const freeDiskGB = Math.round(diskInfo.free / (1024 ** 3));
+    const usedDiskGB = totalDiskGB - freeDiskGB;
+    
+    // Get CPU info
+    const cpus = os.cpus();
+    const cpuModel = cpus[0]?.model || 'Unknown';
+    const cpuSpeed = cpus[0]?.speed || 0;
+    
+    log(`💻 System: ${cpus.length} cores, ${totalMemGB}GB RAM (${freeMemGB}GB free), ${totalDiskGB}GB Disk (${freeDiskGB}GB free)`, 'debug');
+    log(`🌐 Network: ${download}↓/${upload}↑ Mbps`, 'debug');
     
     return {
-      cpu: os.cpus().length,
-      ram: Math.round(os.totalmem() / (1024 ** 2)), // Keep as MB for server conversion
+      cpu: cpus.length,
+      ram: Math.round(totalMemBytes / (1024 ** 2)), // MB में
       disk: freeDiskGB,
       speed: download,
       uploadSpeed: upload,
       lastSeen: Math.floor(Date.now() / 1000),
-      systemPermission: true
+      systemPermission: true,
+      // Additional metrics for debugging
+      _details: {
+        cpuModel,
+        cpuSpeedMHz: cpuSpeed,
+        totalMemoryGB: totalMemGB,
+        freeMemoryGB: freeMemGB,
+        totalDiskGB,
+        usedDiskGB
+      }
     };
   } catch (err) {
     log(`❌ Metrics error: ${err.message}`, 'error');
@@ -75,30 +109,82 @@ const getSystemMetrics = () => {
 
 const saveToken = (token) => {
   try {
-    fs.mkdirSync(path.dirname(TOKEN_PATH), { recursive: true });
+    const dir = path.dirname(TOKEN_PATH);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+      log(`📁 Created directory: ${dir}`);
+    }
+    
     fs.writeFileSync(TOKEN_PATH, token);
-    log('✅ Mining token saved');
+    log(`✅ Mining token saved to ${TOKEN_PATH}`);
+    
+    // Verify the token was saved
+    if (fs.existsSync(TOKEN_PATH)) {
+      const savedToken = fs.readFileSync(TOKEN_PATH, 'utf8').trim();
+      if (savedToken === token) {
+        log(`🔐 Token verified (${savedToken.length} chars)`);
+      }
+    }
   } catch (err) {
     log(`❌ Token save failed: ${err.message}`, 'error');
   }
 };
 
 const readNodeId = () => {
-  try {
-    return fs.readFileSync('/root/netrum-lite-node/src/identity/node-id/id.txt', 'utf8').trim();
-  } catch (err) {
-    log(`❌ Node ID read failed: ${err.message}`, 'error');
-    return null;
+  const possiblePaths = [
+    '/root/netrum-lite-node/src/identity/node-id/id.txt',
+    path.resolve(__dirname, '../identity/node-id/id.txt'),
+    path.resolve(__dirname, '../../identity/node-id/id.txt')
+  ];
+  
+  for (const nodeIdPath of possiblePaths) {
+    try {
+      if (fs.existsSync(nodeIdPath)) {
+        const nodeId = fs.readFileSync(nodeIdPath, 'utf8').trim();
+        if (nodeId && nodeId.length > 0) {
+          log(`📄 Node ID read from: ${nodeIdPath}`, 'debug');
+          return nodeId;
+        }
+      }
+    } catch (err) {
+      // Continue to next path
+    }
   }
+  
+  log(`❌ Node ID not found in any path: ${possiblePaths.join(', ')}`, 'error');
+  return null;
+};
+
+const calculateNextSyncDelay = (serverNextSyncAllowed) => {
+  const now = Date.now();
+  
+  if (!serverNextSyncAllowed || serverNextSyncAllowed <= now) {
+    return BASE_SYNC_INTERVAL;
+  }
+  
+  const baseDelay = serverNextSyncAllowed - now;
+  
+  const minDelay = 60000; // 60 seconds
+  const maxDelay = 120000; // 120 seconds
+  
+  // Add buffer for network delays
+  const bufferedDelay = Math.max(minDelay, Math.min(maxDelay, baseDelay + SYNC_BUFFER));
+  
+  log(`⏰ Server says next sync at: ${new Date(serverNextSyncAllowed).toISOString()}`, 'debug');
+  log(`⏰ Calculated delay: ${Math.round(bufferedDelay/1000)}s (base: ${Math.round(baseDelay/1000)}s + buffer: ${Math.round(SYNC_BUFFER/1000)}s)`, 'debug');
+  
+  return bufferedDelay;
 };
 
 const syncNode = async () => {
   if (isSyncing) {
     log('⏳ Sync already in progress, skipping...');
-    return;
+    return { success: false, reason: 'already_syncing' };
   }
 
   isSyncing = true;
+  let nextSyncDelay = BASE_SYNC_INTERVAL;
+  let syncResult = { success: false };
   
   try {
     const nodeId = readNodeId();
@@ -125,7 +211,7 @@ const syncNode = async () => {
       metrics.uploadSpeed >= 5
     );
 
-    log(`📈 System Status: ${isActive ? 'ACTIVE' : 'INACTIVE'}`);
+    log(`📈 System Status: ${isActive ? 'ACTIVE ✅' : 'INACTIVE ⚠️'}`);
 
     const payload = {
       nodeId,
@@ -134,95 +220,251 @@ const syncNode = async () => {
       systemPermission: true
     };
 
-   // log(`📤 Sending payload to: ${API_BASE_URL}${SYNC_ENDPOINT}`);
-
+    log(`📤 Sending metrics to server...`, 'debug');
+    const startTime = Date.now();
+    
     const response = await api.post(SYNC_ENDPOINT, payload);
-
-    // COMPLETE RESPONSE ANALYSIS
-   // log(`📥 Raw API Response: ${JSON.stringify(response.data)}`);
+    const endTime = Date.now();
+    const responseTime = endTime - startTime;
+    
+    log(`📥 Server response in ${responseTime}ms`, 'debug');
 
     if (response.data) {
       if (response.data.success === true) {
-        log(`✅ Sync successful | Status: ${response.data.syncStatus}`);
+        log(`✅ Sync successful | Status: ${response.data.syncStatus} | Time: ${responseTime}ms`);
+        consecutiveErrors = 0; // Reset error counter
         
         if (response.data.miningToken) {
           saveToken(response.data.miningToken);
-          log('💰 Mining token received');
+          log('💰 Mining token received and saved');
         } else {
           log('⚠️ No mining token received - may not meet requirements', 'warn');
         }
         
         if (response.data.log) {
-      //    log(`💬 Server log: ${response.data.log}`);
+          log(`💬 Server: ${response.data.log}`);
         }
         
-        // Next sync timing
+        // Calculate next sync timing based on server response
         if (response.data.nextSyncAllowed) {
-          const nextSync = Math.max(60000, response.data.nextSyncAllowed - Date.now());
-          log(`⏰ Next sync in: ${Math.round(nextSync/1000)} seconds`);
+          nextSyncDelay = calculateNextSyncDelay(response.data.nextSyncAllowed);
+          log(`⏰ Next sync in ${Math.round(nextSyncDelay/1000)} seconds`);
         }
+        
+        syncResult = { 
+          success: true, 
+          nextSyncDelay,
+          syncStatus: response.data.syncStatus,
+          hasToken: !!response.data.miningToken
+        };
         
       } else {
         log(`❌ API returned success: false | Error: ${response.data.error || 'Unknown error'}`, 'warn');
+        consecutiveErrors++;
+        syncResult = { success: false, reason: 'api_error', error: response.data.error };
       }
     } else {
       log('❌ Empty response from API', 'error');
+      consecutiveErrors++;
+      syncResult = { success: false, reason: 'empty_response' };
     }
 
   } catch (err) {
     // ENHANCED ERROR HANDLING
     if (err.response) {
-      log(`❌ API Error ${err.response.status}: ${JSON.stringify(err.response.data)}`, 'error');
+      const status = err.response.status;
+      const data = err.response.data;
       
-      if (err.response.status === 400) {
+      log(`❌ API Error ${status}: ${JSON.stringify(data)}`, 'error');
+      consecutiveErrors++;
+      
+      if (status === 400) {
         log('🔍 Bad request - check node ID format', 'error');
-      } else if (err.response.status === 403) {
+        syncResult = { success: false, reason: 'bad_request', status };
+      } else if (status === 403) {
         log('🚫 System permission denied', 'error');
-      } else if (err.response.status === 404) {
+        syncResult = { success: false, reason: 'permission_denied', status };
+      } else if (status === 404) {
         log('🔍 Node not registered', 'error');
-      } else if (err.response.status === 429) {
-        const waitTime = err.response.data?.nextSyncAllowed ? 
-          Math.round((err.response.data.nextSyncAllowed - Date.now())/1000) : 60;
-        log(`⏰ Rate limited - wait ${waitTime} seconds`, 'warn');
+        syncResult = { success: false, reason: 'not_found', status };
+      } else if (status === 429) {
+        // Rate limit handling
+        let waitTime = 60000; // Default 60 seconds
+        
+        if (data?.detail?.nextSyncAllowed) {
+          nextSyncDelay = calculateNextSyncDelay(data.detail.nextSyncAllowed);
+          log(`⏰ Rate limited - waiting ${Math.round(nextSyncDelay/1000)} seconds`, 'warn');
+        } else {
+          // Exponential backoff for rate limiting
+          const backoffFactor = Math.min(5, consecutiveErrors);
+          nextSyncDelay = BASE_SYNC_INTERVAL * (1 + (backoffFactor * 0.5));
+          log(`⏰ Rate limited (no server time) - waiting ${Math.round(nextSyncDelay/1000)} seconds`, 'warn');
+        }
+        
+        syncResult = { 
+          success: false, 
+          reason: 'rate_limited', 
+          status,
+          nextSyncDelay,
+          waitSeconds: Math.round(nextSyncDelay/1000)
+        };
+        
+      } else if (status >= 500) {
+        // Server error - use exponential backoff
+        const backoffFactor = Math.min(10, consecutiveErrors);
+        nextSyncDelay = BASE_SYNC_INTERVAL * (1 + (backoffFactor * 0.3));
+        log(`🔧 Server error - backing off to ${Math.round(nextSyncDelay/1000)} seconds`, 'warn');
+        syncResult = { success: false, reason: 'server_error', status, nextSyncDelay };
       }
+    } else if (err.code === 'ECONNABORTED') {
+      log(`⏱️ Request timeout (${api.defaults.timeout}ms)`, 'error');
+      consecutiveErrors++;
+      syncResult = { success: false, reason: 'timeout', code: err.code };
     } else if (err.request) {
       log('🌐 Network error - no response from server', 'error');
+      consecutiveErrors++;
+      
+      // Network error - exponential backoff
+      const backoffFactor = Math.min(8, consecutiveErrors);
+      nextSyncDelay = BASE_SYNC_INTERVAL * (1 + (backoffFactor * 0.4));
+      log(`🌐 Network issue - backing off to ${Math.round(nextSyncDelay/1000)} seconds`, 'warn');
+      
+      syncResult = { success: false, reason: 'network_error', nextSyncDelay };
     } else {
       log(`💥 Unexpected error: ${err.message}`, 'error');
+      consecutiveErrors++;
+      syncResult = { success: false, reason: 'unexpected_error', message: err.message };
     }
   } finally {
     isSyncing = false;
+    
+    // Log error streak if high
+    if (consecutiveErrors >= 3) {
+      log(`⚠️ ${consecutiveErrors} consecutive errors`, 'warn');
+    }
+    
+    if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+      log(`🚨 ${MAX_CONSECUTIVE_ERRORS}+ consecutive errors - check network/server`, 'error');
+    }
+    
+    return { ...syncResult, nextSyncDelay, consecutiveErrors };
   }
 };
+
+const scheduleNextSync = (customDelay = null) => {
+  if (syncTimeout) {
+    clearTimeout(syncTimeout);
+    syncTimeout = null;
+  }
+  
+  const delay = customDelay || BASE_SYNC_INTERVAL;
+  
+  if (delay > 300000) {
+    log(`⏰ Long delay scheduled: ${Math.round(delay/1000)} seconds`, 'warn');
+  }
+  
+  syncTimeout = setTimeout(async () => {
+    log(`🔄 Starting scheduled sync...`, 'debug');
+    const result = await syncNode();
+    
+    // Schedule next sync based on result
+    let nextDelay = BASE_SYNC_INTERVAL;
+    
+    if (result.nextSyncDelay && result.nextSyncDelay > 0) {
+      nextDelay = result.nextSyncDelay;
+    } else if (!result.success && result.reason === 'rate_limited') {
+      nextDelay = Math.min(120000, nextDelay * 1.2);
+    } else if (!result.success) {
+      const backoffFactor = Math.min(5, consecutiveErrors);
+      nextDelay = Math.min(300000, BASE_SYNC_INTERVAL * (1 + (backoffFactor * 0.5)));
+    }
+    
+    // Ensure minimum delay
+    nextDelay = Math.max(30000, nextDelay); // Minimum 30 seconds
+    
+    scheduleNextSync(nextDelay);
+  }, delay);
+  
+  const nextSyncTime = new Date(Date.now() + delay);
+  log(`📅 Next sync scheduled at: ${nextSyncTime.toISOString()} (in ${Math.round(delay/1000)}s)`, 'debug');
+};
+
 const startService = () => {
   log('🚀 Starting Netrum Node Sync Service');
-  log(`⏰ Sync interval: ${SYNC_INTERVAL/1000} seconds`);
+  log(`📊 Base sync interval: ${BASE_SYNC_INTERVAL/1000} seconds`);
+  log(`📁 Token path: ${TOKEN_PATH}`);
   log(`📁 Speed file: ${SPEED_FILE}`);
+  log(`🛡️ Sync buffer: ${SYNC_BUFFER/1000} seconds`);
   
-  // ✅ Initial sync
-  setTimeout(() => {
-    syncNode();
-  }, 5000); // 5 second delay for startup
+  // Check for required files
+  if (!fs.existsSync(SPEED_FILE)) {
+    log(`⚠️ Speed file not found: ${SPEED_FILE}`, 'warn');
+    log('⚠️ Using minimum speed values', 'warn');
+  }
   
-  // ✅ Regular sync every 1 minute
+  const nodeId = readNodeId();
+  if (!nodeId) {
+    log('❌ CRITICAL: Node ID not found. Service may not work correctly.', 'error');
+  } else {
+    log(`✅ Node ID loaded: ${nodeId}`);
+  }
+  
+  // Health monitoring for speed
   setInterval(() => {
-    syncNode();
-  }, SYNC_INTERVAL);
-
-  // ✅ Health monitoring
-  setInterval(() => {
-    const { download, upload } = getSpeedFromFile();
+    try {
+      const { download, upload } = getSpeedFromFile();
+      log(`📈 Current speed: ${download}↓/${upload}↑ Mbps`, 'debug');
+    } catch (err) {
+      // Silent fail for health check
+    }
   }, 30000); // Every 30 seconds
-
-  // ✅ Graceful shutdown
+  
+  // Initial sync after 10 seconds
+  setTimeout(async () => {
+    log('🔄 Starting initial sync...');
+    const result = await syncNode();
+    
+    // Calculate delay for next sync
+    let initialDelay = BASE_SYNC_INTERVAL;
+    if (result.nextSyncDelay && result.nextSyncDelay > 0) {
+      initialDelay = result.nextSyncDelay;
+    }
+    
+    log(`🎯 Initial sync completed. Next sync in ${Math.round(initialDelay/1000)}s`);
+    scheduleNextSync(initialDelay);
+  }, 10000);
+  
+  // Graceful shutdown
   process.on('SIGTERM', () => {
+    log('🛑 SIGTERM received - shutting down gracefully...');
+    if (syncTimeout) clearTimeout(syncTimeout);
+    log('✅ Service shutdown complete');
     process.exit(0);
   });
 
   process.on('SIGINT', () => {
+    log('🛑 SIGINT received - shutting down gracefully...');
+    if (syncTimeout) clearTimeout(syncTimeout);
+    log('✅ Service shutdown complete');
     process.exit(0);
+  });
+  
+  // Uncaught exception handling
+  process.on('uncaughtException', (error) => {
+    log(`💥 Uncaught Exception: ${error.message}`, 'error');
+    log(`Stack: ${error.stack}`, 'error');
+  });
+  
+  process.on('unhandledRejection', (reason, promise) => {
+    log(`💥 Unhandled Rejection at: ${promise}, reason: ${reason}`, 'error');
   });
 };
 
 // ✅ Start the service
-startService();
+try {
+  startService();
+  log('✅ Service started successfully');
+} catch (error) {
+  log(`💥 Failed to start service: ${error.message}`, 'error');
+  process.exit(1);
+}
