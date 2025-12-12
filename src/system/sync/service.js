@@ -106,20 +106,20 @@ const readNodeId = () => {
 };
 
 // ------------------------
-// COUNTDOWN TIMER (Every 5 sec update)
+// COUNTDOWN TIMER (Every 25 sec update)
 // ------------------------
 let countdown = SYNC_INTERVAL / 1000;
 
 const startCountdown = () => {
   countdown = SYNC_INTERVAL / 1000;
   const timer = setInterval(() => {
-    countdown -= 5;
+    countdown -= 25;
     if (countdown <= 0) {
       clearInterval(timer);
     } else {
       log(`⏳ Next sync in ${countdown} seconds...`);
     }
-  }, 5000);
+  }, 25000);
 };
 
 // ------------------------
