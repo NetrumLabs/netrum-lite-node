@@ -9,16 +9,19 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Configuration
+// Configuration - SERVER KE ACCORDING
 const API_BASE_URL = 'https://node.netrumlabs.dev';
 const SYNC_ENDPOINT = '/metrics/sync';
 const TOKEN_PATH = path.resolve(__dirname, '../mining/miningtoken.txt');
 const SPEED_FILE = path.resolve(__dirname, '../system/speedtest.txt');
-const SYNC_INTERVAL = 60000; // 1 minute
+
+// Server: 60000ms cooldown - 2000ms buffer = 58000ms effective
+// Client: 58000ms + 2000ms buffer = 60000ms (safe)
+const SYNC_INTERVAL = 60000; // 60 seconds
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 60000, // 1 minute timeout
+  timeout: 30000, // 30 seconds
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json'
@@ -29,31 +32,24 @@ const log = (msg) => {
   console.log(`[${new Date().toISOString()}] ${msg}`);
 };
 
-// ✅ File se latest speed data read kare
 const getSpeedFromFile = () => {
   try {
     if (fs.existsSync(SPEED_FILE)) {
       const speedData = fs.readFileSync(SPEED_FILE, 'utf8').trim();
       const [download, upload] = speedData.split(' ').map(parseFloat);
-      
       if (download && upload) {
         return { download, upload };
       }
     }
   } catch (err) {
-    log(`📄 Speed file read error: ${err.message}`);
+    log(`Speed file error: ${err.message}`);
   }
-  
-  // Fallback to minimum speeds
-  log('⚠️ Using minimum speeds');
   return { download: 1, upload: 0.1 };
 };
 
 const getSystemMetrics = () => {
   try {
     const { download, upload } = getSpeedFromFile();
-    
-    const totalMemGB = Math.round(os.totalmem() / (1024 ** 3));
     const freeDiskGB = Math.round(diskusage.checkSync('/').free / (1024 ** 3));
     
     return {
@@ -66,7 +62,7 @@ const getSystemMetrics = () => {
       systemPermission: true
     };
   } catch (err) {
-    log(`❌ Metrics error: ${err.message}`);
+    log(`Metrics error: ${err.message}`);
     return null;
   }
 };
@@ -75,9 +71,9 @@ const saveToken = (token) => {
   try {
     fs.mkdirSync(path.dirname(TOKEN_PATH), { recursive: true });
     fs.writeFileSync(TOKEN_PATH, token);
-    log(`✅ Mining token saved`);
+    log(`Mining token saved (${token.length} chars)`);
   } catch (err) {
-    log(`❌ Token save failed: ${err.message}`);
+    log(`Token save failed: ${err.message}`);
   }
 };
 
@@ -85,7 +81,7 @@ const readNodeId = () => {
   try {
     return fs.readFileSync('/root/netrum-lite-node/src/identity/node-id/id.txt', 'utf8').trim();
   } catch (err) {
-    log(`❌ Node ID read failed: ${err.message}`);
+    log(`Node ID read failed: ${err.message}`);
     return null;
   }
 };
@@ -94,20 +90,17 @@ const syncNode = async () => {
   try {
     const nodeId = readNodeId();
     if (!nodeId) {
-      log('❌ Empty node ID');
+      log('Error: Empty node ID');
       return;
     }
 
-    log(`🔍 Node ID: ${nodeId}`);
+    log(`Node ID: ${nodeId}`);
     
     const metrics = getSystemMetrics();
     if (!metrics) {
-      log('❌ Failed to get metrics');
+      log('Error: Failed to get metrics');
       return;
     }
-
-    log(`📊 Server Requirements: CPU: 2+ cores, RAM: 4GB (4096MB), Disk: 50GB, Speed: 5+ Mbps`);
-    log(`📊 Actual Metrics: CPU: ${metrics.cpu} cores, RAM: ${metrics.ram}MB (${Math.round(metrics.ram/1024)}GB), Disk: ${metrics.disk}GB, Speed: ${metrics.speed}↓/${metrics.uploadSpeed}↑ Mbps`);
 
     const isActive = (
       metrics.cpu >= 2 &&
@@ -117,7 +110,7 @@ const syncNode = async () => {
       metrics.uploadSpeed >= 5
     );
 
-    log(`📈 System Status: ${isActive ? 'ACTIVE' : 'INACTIVE'}`);
+    log(`System Status: ${isActive ? 'ACTIVE' : 'INACTIVE'}`);
 
     const payload = {
       nodeId,
@@ -126,29 +119,25 @@ const syncNode = async () => {
       systemPermission: true
     };
 
-    log(`📤 Sending data to server...`);
+    log(`Sending to server...`);
     const response = await api.post(SYNC_ENDPOINT, payload);
 
-    if (response.data) {
-      if (response.data.success === true) {
-        log(`✅ Sync successful | Status: ${response.data.syncStatus}`);
-        
-        if (response.data.miningToken) {
-          saveToken(response.data.miningToken);
-          log('✅ Mining token received');
-        } else {
-          log('⚠️ No mining token received');
-        }
-        
-        if (response.data.log) {
-          log(`📝 Server: ${response.data.log}`);
-        }
-        
+    if (response.data && response.data.success === true) {
+      log(`Sync successful - Status: ${response.data.syncStatus}`);
+      
+      if (response.data.miningToken) {
+        saveToken(response.data.miningToken);
+        log('✅ Mining token received');
       } else {
-        log(`❌ API error: ${response.data.error || 'Unknown error'}`);
+        log('No mining token received');
       }
+      
+      if (response.data.log) {
+        log(`Server: ${response.data.log}`);
+      }
+      
     } else {
-      log('❌ Empty response from API');
+      log(`Sync failed: ${response.data?.error || 'Unknown error'}`);
     }
 
   } catch (err) {
@@ -156,47 +145,46 @@ const syncNode = async () => {
       const status = err.response.status;
       const data = err.response.data;
       
-      log(`❌ API Error ${status}: ${JSON.stringify(data)}`);
-      
       if (status === 429) {
         const waitTime = data?.detail?.remainingMs ? 
           Math.round(data.detail.remainingMs/1000) : 60;
-        log(`⏰ Rate limited - wait ${waitTime} seconds`);
+        log(`Rate limited - wait ${waitTime} seconds`);
+      } else if (status === 400) {
+        log(`Bad request: ${JSON.stringify(data)}`);
+      } else if (status === 403) {
+        log('Permission denied');
+      } else if (status === 404) {
+        log('Node not found');
+      } else {
+        log(`Server error ${status}: ${JSON.stringify(data)}`);
       }
     } else if (err.code === 'ECONNABORTED') {
-      log('⏱️ Request timeout');
+      log('Request timeout');
     } else if (err.request) {
-      log('🌐 Network error - no response from server');
+      log('Network error');
     } else {
-      log(`💥 Error: ${err.message}`);
+      log(`Error: ${err.message}`);
     }
   }
 };
 
 const startService = () => {
-  log('🚀 Starting Netrum Node Sync Service');
-  log(`⏰ Sync interval: ${SYNC_INTERVAL/1000} seconds`);
-  log(`📁 Speed file: ${SPEED_FILE}`);
+  log('Starting Netrum Node Sync Service');
+  log(`Sync interval: ${SYNC_INTERVAL/1000} seconds`);
   
-  // ✅ Initial sync
+  // Initial sync
   setTimeout(() => {
     syncNode();
-  }, 5000);
+  }, 10000);
   
-  // ✅ Regular sync every 1 minute
+  // Regular sync - 60 seconds interval
   setInterval(() => {
     syncNode();
   }, SYNC_INTERVAL);
-
-  // ✅ Graceful shutdown
-  process.on('SIGTERM', () => {
-    process.exit(0);
-  });
-
-  process.on('SIGINT', () => {
-    process.exit(0);
-  });
+  
+  // Graceful shutdown
+  process.on('SIGTERM', () => process.exit(0));
+  process.on('SIGINT', () => process.exit(0));
 };
 
-// ✅ Start the service
 startService();
