@@ -139,35 +139,38 @@ const processTask = async ({ task, taskCategory }) => {
 /* ================= TASK COMPLETE ================= */
 
 const completeTaskOnServer = async (taskId, nodeId, status, taskCategory) => {
-  const miningToken = getMiningToken();
-  const authCode = await getEncryptedAuthCode(miningToken, nodeId);
-
-  if (!authCode) return false;
-
   try {
-    const res = await api.put(TASK_COMPLETION_URL, {
+    const miningToken = getMiningToken();
+    const authCode = await getEncryptedAuthCode(miningToken, nodeId);
+    if (!authCode) return false;
+
+    const payload = {
       taskId,
       nodeId,
       status,
       taskCategory,
-      authCode,
-      result: {
-        message:
-          taskCategory === 'BLANK_TASK'
-            ? 'blank_task_completed'
-            : 'tts_processing_completed'
-      }
-    });
+      authCode
+    };
 
-    if (res.data?.success) {
+    // 🔑 IMPORTANT: result only for REAL task
+    if (taskCategory !== 'BLANK_TASK') {
+      payload.result = {
+        message: 'tts_processing_completed'
+      };
+    }
+
+    const response = await api.put(TASK_COMPLETION_URL, payload);
+
+    if (response.data?.success) {
       log(`✅ Task ${taskId} completion acknowledged`);
       return true;
     }
 
     log(`❌ Task completion rejected`);
     return false;
-  } catch (e) {
-    log(`❌ Task completion error: ${e.message}`);
+
+  } catch (err) {
+    log(`❌ Task completion error: ${err.message}`);
     return false;
   }
 };
