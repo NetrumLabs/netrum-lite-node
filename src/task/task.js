@@ -174,8 +174,13 @@ const completeTaskOnServer = async (taskId, nodeId, status, taskCategory) => {
       status,
       taskCategory,
       authCode,
-      result: taskCategory === 'BLANK_TASK' ? 'blank_task_completed' : 'tts_processing_completed'
+      result: {
+        message: taskCategory === 'BLANK_TASK'
+          ? 'blank_task_completed'
+          : 'tts_processing_completed'
+      }
     });
+
 
     if (response.data?.success) {
       log(`✅ Task ${taskId} completion acknowledged`);
