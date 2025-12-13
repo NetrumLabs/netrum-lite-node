@@ -7,15 +7,17 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Configuration
+/* ================= CONFIG ================= */
+
 const API_BASE_URL = 'https://node.netrumlabs.dev';
 const AUTH_CODE_URL = '/polling/get-auth-code';
 const TASK_PROVIDER_URL = '/polling/taskProvider';
 const TASK_COMPLETION_URL = '/polling/taskCompletion';
 
-// File paths
 const MINING_TOKEN_PATH = path.resolve(__dirname, '../system/mining/miningtoken.txt');
 const NODE_ID_PATH = path.resolve(__dirname, '../identity/node-id/id.txt');
+
+/* ================= HTTP CLIENT ================= */
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -26,213 +28,183 @@ const api = axios.create({
   }
 });
 
-const log = (msg) => console.log(`[${new Date().toISOString()}] ${msg}`);
+/* ================= UTILS ================= */
 
-// Get mining token
+const log = (msg) => {
+  console.log(`[${new Date().toISOString()}] ${msg}`);
+};
+
+const sleep = (ms) => new Promise(res => setTimeout(res, ms));
+
+/* ================= READ FILES ================= */
+
 const getMiningToken = () => {
   try {
-    if (fs.existsSync(MINING_TOKEN_PATH)) {
-      return fs.readFileSync(MINING_TOKEN_PATH, 'utf8').trim();
-    }
-    return null;
-  } catch (err) {
-    log(`Token read error: ${err.message}`);
+    return fs.existsSync(MINING_TOKEN_PATH)
+      ? fs.readFileSync(MINING_TOKEN_PATH, 'utf8').trim()
+      : null;
+  } catch (e) {
+    log(`❌ Mining token read error: ${e.message}`);
     return null;
   }
 };
 
-// Get node ID
 const getNodeId = () => {
   try {
-    if (fs.existsSync(NODE_ID_PATH)) {
-      return fs.readFileSync(NODE_ID_PATH, 'utf8').trim();
-    }
-    return null;
-  } catch (err) {
-    log(`Node ID read error: ${err.message}`);
+    return fs.existsSync(NODE_ID_PATH)
+      ? fs.readFileSync(NODE_ID_PATH, 'utf8').trim()
+      : null;
+  } catch (e) {
+    log(`❌ Node ID read error: ${e.message}`);
     return null;
   }
 };
 
-// Get Encrypted Auth Code - NEW FUNCTION
+/* ================= AUTH CODE ================= */
+
 const getEncryptedAuthCode = async (miningToken, nodeId) => {
   try {
-    const response = await api.post(AUTH_CODE_URL, {
-      miningToken,
-      nodeId
-    });
+    const res = await api.post(AUTH_CODE_URL, { miningToken, nodeId });
 
-    if (response.data?.success) {
-      log(`🔐 Auth code received (expires in ${response.data.expiresIn}s)`);
-      return response.data.authCode;
-    } else {
-      log(`❌ Auth code error: ${response.data?.error}`);
-      return null;
+    if (res.data?.success) {
+      log(`🔐 Auth code received (expires in ${res.data.expiresIn}s)`);
+      return res.data.authCode;
     }
-  } catch (err) {
-    if (err.response) {
-      log(`Auth code error: ${err.response.status} - ${JSON.stringify(err.response.data)}`);
-    } else {
-      log(`Auth code request failed: ${err.message}`);
-    }
+
+    log(`❌ Auth code error`);
+    return null;
+  } catch (e) {
+    log(`❌ Auth code request failed: ${e.message}`);
     return null;
   }
 };
 
-// Get task from server - WITH ENCRYPTED AUTH CODE
+/* ================= TASK FETCH ================= */
+
 const getTaskFromServer = async () => {
+  const miningToken = getMiningToken();
+  const nodeId = getNodeId();
+
+  if (!miningToken || !nodeId) {
+    log('❌ Missing mining token or node ID');
+    return null;
+  }
+
+  const authCode = await getEncryptedAuthCode(miningToken, nodeId);
+  if (!authCode) return null;
+
   try {
-    const miningToken = getMiningToken();
-    const nodeId = getNodeId();
-    
-    if (!miningToken) {
-      log('❌ No mining token found');
-      return null;
-    }
-
-    if (!nodeId) {
-      log('❌ No node ID found');
-      return null;
-    }
-
-    // Step 1: Get encrypted auth code first
-    const authCode = await getEncryptedAuthCode(miningToken, nodeId);
-    if (!authCode) {
-      return null;
-    }
-
-    // Step 2: Use the encrypted auth code to get tasks
-    const response = await api.post(TASK_PROVIDER_URL, {
+    const res = await api.post(TASK_PROVIDER_URL, {
       miningToken,
       nodeId,
-      authCode 
+      authCode
     });
 
-    if (response.data?.success && response.data.task) {
-      const taskType = response.data.taskCategory === 'BLANK_TASK' ? 'Task-B' : 'Task-T';
-      log(`✅ ${taskType} received: ${response.data.task.taskId}`);
-      log(`📊 RAM Required: ${response.data.task.ramRequired}GB`);
-      log(`🔢 Task Count: ${response.data.userTaskCount || 0}`);
-      return response.data;
-    } else if (response.data?.success) {
-      log(`📊 Status: ${response.data.message}`);
-      log(`🔢 Task Count: ${response.data.userTaskCount || 0}`);
-      return response.data;
-    } else {
-      log(`❌ API Error: ${response.data?.error}`);
-      return null;
+    if (res.data?.success && res.data.task) {
+      const type = res.data.taskCategory === 'BLANK_TASK' ? 'Task-B' : 'Task-T';
+      log(`✅ ${type} received: ${res.data.task.taskId}`);
+      log(`📊 RAM Required: ${res.data.task.ramRequired}GB`);
+      log(`🔢 Task Count: ${res.data.userTaskCount}`);
+      return res.data;
     }
 
-  } catch (err) {
-    if (err.response) {
-      log(`Task provider error: ${err.response.status} - ${JSON.stringify(err.response.data)}`);
-    } else {
-      log(`Task request failed: ${err.message}`);
+    if (res.data?.success) {
+      log(`📊 ${res.data.message}`);
+      return res.data;
     }
+
+    return null;
+  } catch (e) {
+    log(`❌ Task provider error: ${e.message}`);
     return null;
   }
 };
 
-// Process task - UPDATED LOGS
-const processTask = async (taskData) => {
-  try {
-    const { task, taskCategory } = taskData;
-    
-    if (taskCategory === 'BLANK_TASK' || task.isBlankTask) {
-      log(`🔄 Processing Task-B: ${task.taskId}`);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      log(`✅ Task-B completed: ${task.taskId}`);
-      return { success: true, isBlankTask: true };
-    } else {
-      log(`🔄 Processing Task-T: ${task.taskId} (Using ${task.ramRequired}GB RAM)`);
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      log(`✅ Task-T completed: ${task.taskId}`);
-      return { success: true, isBlankTask: false };
-    }
-    
-  } catch (err) {
-    log(`❌ Task processing failed: ${err.message}`);
-    return { success: false, isBlankTask: false };
+/* ================= TASK PROCESS ================= */
+
+const processTask = async ({ task, taskCategory }) => {
+  if (taskCategory === 'BLANK_TASK' || task.isBlankTask) {
+    log(`🔄 Processing Task-B: ${task.taskId}`);
+    await sleep(1000);
+    log(`✅ Task-B completed: ${task.taskId}`);
+    return true;
   }
+
+  log(`🔄 Processing Task-T: ${task.taskId} (${task.ramRequired}GB RAM)`);
+  await sleep(5000);
+  log(`✅ Task-T completed: ${task.taskId}`);
+  return true;
 };
 
-// Complete task on server
-const completeTaskOnServer = async (taskId, nodeId, status, taskCategory) => {
-  try {
-    const miningToken = getMiningToken();
-    const authCode = await getEncryptedAuthCode(miningToken, nodeId);
-    
-    if (!authCode) {
-      log('❌ Cannot get auth code for task completion');
-      return false;
-    }
+/* ================= TASK COMPLETE ================= */
 
-    // ✅ Use TASK_COMPLETION_URL instead of TASK_PROVIDER_URL
-    const response = await api.put(TASK_COMPLETION_URL, {
+const completeTaskOnServer = async (taskId, nodeId, status, taskCategory) => {
+  const miningToken = getMiningToken();
+  const authCode = await getEncryptedAuthCode(miningToken, nodeId);
+
+  if (!authCode) return false;
+
+  try {
+    const res = await api.put(TASK_COMPLETION_URL, {
       taskId,
       nodeId,
       status,
       taskCategory,
       authCode,
       result: {
-        message: taskCategory === 'BLANK_TASK'
-          ? 'blank_task_completed'
-          : 'tts_processing_completed'
+        message:
+          taskCategory === 'BLANK_TASK'
+            ? 'blank_task_completed'
+            : 'tts_processing_completed'
       }
     });
 
-
-    if (response.data?.success) {
+    if (res.data?.success) {
       log(`✅ Task ${taskId} completion acknowledged`);
       return true;
-    } else {
-      log(`❌ Task completion failed: ${response.data?.error}`);
-      return false;
     }
-  } catch (err) {
-    log(`❌ Task completion error: ${err.message}`);
+
+    log(`❌ Task completion rejected`);
+    return false;
+  } catch (e) {
+    log(`❌ Task completion error: ${e.message}`);
     return false;
   }
 };
 
-// Main loop
+/* ================= MAIN LOOP ================= */
+
 const processTasks = async () => {
-  try {
-    log('🚀 Starting task processor with encrypted authentication...');
-    const nodeId = getNodeId();
-    
-    while (true) {
-      const taskData = await getTaskFromServer();
-      
-      if (taskData && taskData.task) {
-        const result = await processTask(taskData);
-        
-        if (result.success) {
-          await completeTaskOnServer(
-            taskData.task.taskId, 
-            nodeId, 
-            'completed', 
-            taskData.taskCategory
-          );
-          const taskType = taskData.taskCategory === 'BLANK_TASK' ? 'Task-B' : 'Task-T';
-          log(`🎉 ${taskType} ${taskData.task.taskId} completed successfully`);
-        }
-        
-        await new Promise(resolve => setTimeout(resolve, 3000));
-      } else if (taskData?.success) {
-        log('📊 Node is active and ready for tasks');
-        await new Promise(resolve => setTimeout(resolve, 3000));
-      } else {
-        log('⏳ Retrying in 3 seconds...');
-        await new Promise(resolve => setTimeout(resolve, 3000));
+  log('🚀 Node task processor started');
+
+  const nodeId = getNodeId();
+
+  while (true) {
+    const taskData = await getTaskFromServer();
+
+    if (taskData?.task) {
+      const ok = await processTask(taskData);
+
+      if (ok) {
+        await completeTaskOnServer(
+          taskData.task.taskId,
+          nodeId,
+          'completed',
+          taskData.taskCategory
+        );
+
+        const type = taskData.taskCategory === 'BLANK_TASK' ? 'Task-B' : 'Task-T';
+        log(`🎉 ${type} ${taskData.task.taskId} completed successfully`);
       }
+
+      await sleep(3000);
+    } else {
+      log('⏳ No task, retrying...');
+      await sleep(3000);
     }
-    
-  } catch (err) {
-    log(`❌ Task processor error: ${err.message}`);
-    setTimeout(processTasks, 5000);
   }
 };
 
-// Start
+/* ================= START ================= */
+
 processTasks();
