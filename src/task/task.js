@@ -19,6 +19,11 @@ const NODE_ID_PATH = path.resolve(__dirname, '../identity/node-id/id.txt');
 
 /* ================= HTTP CLIENT ================= */
 
+const sleepSeconds = async (sec) => {
+  log(`⏳ Sleeping for ${sec}s`);
+  await sleep(sec * 1000);
+};
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
@@ -87,11 +92,15 @@ const getTaskFromServer = async () => {
 
   if (!miningToken || !nodeId) {
     log('❌ Missing mining token or node ID');
+    await sleepSeconds(60);
     return null;
   }
 
   const authCode = await getEncryptedAuthCode(miningToken, nodeId);
-  if (!authCode) return null;
+  if (!authCode) {
+    await sleepSeconds(60);
+    return null;
+  }
 
   try {
     const res = await api.post(TASK_PROVIDER_URL, {
@@ -103,19 +112,22 @@ const getTaskFromServer = async () => {
     if (res.data?.success && res.data.task) {
       const type = res.data.taskCategory === 'BLANK_TASK' ? 'Task-B' : 'Task-T';
       log(`✅ ${type} received: ${res.data.task.taskId}`);
-      log(`📊 RAM Required: ${res.data.task.ramRequired}GB`);
-      log(`🔢 Task Count: ${res.data.userTaskCount}`);
-      return res.data;
-    }
-
-    if (res.data?.success) {
-      log(`📊 ${res.data.message}`);
       return res.data;
     }
 
     return null;
+
   } catch (e) {
+    // 🔥 IMPORTANT: handle 429 properly
+    if (e.response?.status === 429) {
+      const retryAfter = e.response.data?.retryAfter || 300;
+      log(`⚠️ Task rate-limited. Retry after ${retryAfter}s`);
+      await sleepSeconds(retryAfter);
+      return null;
+    }
+
     log(`❌ Task provider error: ${e.message}`);
+    await sleepSeconds(60);
     return null;
   }
 };
@@ -200,10 +212,10 @@ const processTasks = async () => {
         log(`🎉 ${type} ${taskData.task.taskId} completed successfully`);
       }
 
-      await sleep(3000);
+      await sleepSeconds(300); // 5 minutes
     } else {
-      log('⏳ No task, retrying...');
-      await sleep(3000);
+      log('⏳ No task available, waiting for next window...');
+      await sleepSeconds(300); // 5 minutes
     }
   }
 };
