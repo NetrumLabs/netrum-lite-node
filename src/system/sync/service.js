@@ -160,8 +160,14 @@ const syncNode = async () => {
 
       // Save token if exists
       if (response.data.miningToken) {
-        saveToken(response.data.miningToken);
-        log("🎉 Mining token received!");
+        const old = fs.existsSync(TOKEN_PATH)
+          ? fs.readFileSync(TOKEN_PATH, "utf8").trim()
+          : null;
+      
+        if (old !== response.data.miningToken) {
+          saveToken(response.data.miningToken);
+          log("🔄 Mining token updated");
+        }
       }
 
       // ---------- DYNAMIC INTERVAL LOGIC ----------
@@ -180,8 +186,10 @@ const syncNode = async () => {
     }
 
   } catch (err) {
-    log(`❌ Sync error: ${err?.response?.status || err.message}`);
-    dynamicInterval = DEFAULT_SYNC_INTERVAL; // fallback
+    const code = err?.response?.status;
+    const msg = err?.response?.data?.error || err.message;
+    log(`❌ Sync error [${code || "NETWORK"}]: ${msg}`);
+    dynamicInterval = DEFAULT_SYNC_INTERVAL;
   }
 };
 
