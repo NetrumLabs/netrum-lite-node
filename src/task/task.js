@@ -10,7 +10,6 @@ const __dirname = path.dirname(__filename);
 /* ================= CONFIG ================= */
 
 const API_BASE_URL = 'https://node.netrumlabs.dev';
-const AUTH_CODE_URL = '/polling/get-auth-code';
 const TASK_PROVIDER_URL = '/polling/taskProvider';
 const TASK_COMPLETION_URL = '/polling/taskCompletion';
 
@@ -18,11 +17,6 @@ const MINING_TOKEN_PATH = path.resolve(__dirname, '../system/mining/miningtoken.
 const NODE_ID_PATH = path.resolve(__dirname, '../identity/node-id/id.txt');
 
 /* ================= HTTP CLIENT ================= */
-
-const sleepSeconds = async (sec) => {
-  log(`⏳ Sleeping for ${sec}s`);
-  await sleep(sec * 1000);
-};
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -40,6 +34,10 @@ const log = (msg) => {
 };
 
 const sleep = (ms) => new Promise(res => setTimeout(res, ms));
+const sleepSeconds = async (sec) => {
+  log(`⏳ Sleeping for ${sec}s`);
+  await sleep(sec * 1000);
+};
 
 /* ================= READ FILES ================= */
 
@@ -65,25 +63,6 @@ const getNodeId = () => {
   }
 };
 
-/* ================= AUTH CODE ================= */
-
-const getEncryptedAuthCode = async (miningToken, nodeId) => {
-  try {
-    const res = await api.post(AUTH_CODE_URL, { miningToken, nodeId });
-
-    if (res.data?.success) {
-      log(`🔐 Auth code received (expires in ${res.data.expiresIn}s)`);
-      return res.data.authCode;
-    }
-
-    log(`❌ Auth code error`);
-    return null;
-  } catch (e) {
-    log(`❌ Auth code request failed: ${e.message}`);
-    return null;
-  }
-};
-
 /* ================= TASK FETCH ================= */
 
 const getTaskFromServer = async () => {
@@ -96,17 +75,10 @@ const getTaskFromServer = async () => {
     return null;
   }
 
-  const authCode = await getEncryptedAuthCode(miningToken, nodeId);
-  if (!authCode) {
-    await sleepSeconds(60);
-    return null;
-  }
-
   try {
     const res = await api.post(TASK_PROVIDER_URL, {
       miningToken,
-      nodeId,
-      authCode
+      nodeId
     });
 
     if (res.data?.success && res.data.task) {
@@ -118,7 +90,12 @@ const getTaskFromServer = async () => {
     return null;
 
   } catch (e) {
-    // 🔥 IMPORTANT: handle 429 properly
+    if (e.response?.status === 401) {
+      log('🔁 Token invalid or expired. Please run sync again.');
+      await sleepSeconds(120);
+      return null;
+    }
+
     if (e.response?.status === 429) {
       const retryAfter = e.response.data?.retryAfter || 300;
       log(`⚠️ Task rate-limited. Retry after ${retryAfter}s`);
@@ -153,27 +130,24 @@ const processTask = async ({ task, taskCategory }) => {
 const completeTaskOnServer = async (taskId, nodeId, status, taskCategory) => {
   try {
     const miningToken = getMiningToken();
-    const authCode = await getEncryptedAuthCode(miningToken, nodeId);
-    if (!authCode) return false;
+    if (!miningToken) return false;
 
     const payload = {
       taskId,
       nodeId,
       status,
-      taskCategory,
-      authCode
+      taskCategory
     };
 
-    // 🔑 IMPORTANT: result only for REAL task
     if (taskCategory !== 'BLANK_TASK') {
       payload.result = {
         message: 'tts_processing_completed'
       };
     }
 
-    const response = await api.put(TASK_COMPLETION_URL, payload);
+    const res = await api.put(TASK_COMPLETION_URL, payload);
 
-    if (response.data?.success) {
+    if (res.data?.success) {
       log(`✅ Task ${taskId} completion acknowledged`);
       return true;
     }
@@ -212,10 +186,10 @@ const processTasks = async () => {
         log(`🎉 ${type} ${taskData.task.taskId} completed successfully`);
       }
 
-      await sleepSeconds(300); // 5 minutes
+      await sleepSeconds(300);
     } else {
-      log('⏳ No task available, waiting for next window...');
-      await sleepSeconds(300); // 5 minutes
+      log('⏳ No task available, waiting...');
+      await sleepSeconds(300);
     }
   }
 };
