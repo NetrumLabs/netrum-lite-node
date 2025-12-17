@@ -97,16 +97,33 @@ async function loadMiningToken() {
       }
 
       /* ---------- TOKEN ROTATION HANDLING ---------- */
+
       if (response.status === 401) {
         log('🔁 Token rotated or expired.');
         log('⏳ Waiting for next sync to receive new token...');
         await sleep(RETRY_DELAY_MS);
         continue;
       }
-
-      if (!response.ok) {
-        throw new Error(res?.message || res?.error || `API error ${response.status}`);
+      
+      if (response.status === 400) {
+        log('⚠️ Mining cannot start due to a requirement issue:');
+        log(`👉 ${res?.detail || res?.message || 'Unknown reason'}`);
+        log('🛑 Please fix the above issue and run mining again.');
+        return; // STOP — user action required
       }
+      
+      if (response.status === 429) {
+        log('⏳ Cooldown active. Please wait before retrying.');
+        await sleep(RETRY_DELAY_MS);
+        continue;
+      }
+      
+      if (!response.ok) {
+        log(`❌ Server error (${response.status}). Try again later.`);
+        await sleep(RETRY_DELAY_MS);
+        continue;
+      }
+
 
       if (res.status === 'already_mining') {
         console.log('✅ Mining already active — no TX needed.');
