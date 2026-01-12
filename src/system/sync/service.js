@@ -187,8 +187,23 @@ const syncNode = async () => {
 
   } catch (err) {
     const code = err?.response?.status;
-    const msg = err?.response?.data?.error || err.message;
-    log(`❌ Sync error [${code || "NETWORK"}]: ${msg}`);
+    const data = err?.response?.data;
+  
+    if (code === 429) {
+      const waitMs = data?.remainingMs || DEFAULT_SYNC_INTERVAL;
+      dynamicInterval = waitMs + 2000;
+      log(`⏳ Server cooldown. Next sync in ${Math.round(dynamicInterval / 1000)}s`);
+      return;
+    }
+  
+    if (code === 404) {
+      // backward compatibility for users not yet updated
+      log("ℹ️ Sync skipped (legacy server or cooldown)");
+      dynamicInterval = DEFAULT_SYNC_INTERVAL;
+      return;
+    }
+  
+    log(`❌ Sync error [${code || "NETWORK"}]: ${data?.error || err.message}`);
     dynamicInterval = DEFAULT_SYNC_INTERVAL;
   }
 };
