@@ -2,6 +2,13 @@
   <img src="assets/banner.png" width="100%">
 </p>
 
+
+![Python](https://img.shields.io/badge/Python-3.10-blue)
+![Ubuntu](https://img.shields.io/badge/Ubuntu-20.04%20%7C%2022.04%20%7C%2024.04-orange)
+![License](https://img.shields.io/badge/License-NLL%20v1.0-green)
+![Status](https://img.shields.io/badge/Status-Stable-brightgreen)
+
+
 # Netrum Lite Node v3
 
 > Lightweight CLI node for the Netrum decentralized compute network.
@@ -358,6 +365,26 @@ Discord Server: https://discord.com/invite/87hVVDuppf
 
 ---
 
+# Updates
+
+Netrum Lite Node includes an automatic update system.
+
+The update worker periodically checks for new releases and safely installs them without requiring manual intervention.
+
+No additional action is required from the node operator.
+
+---
+
+# Security
+
+- Private keys are stored locally.
+- Private keys are never transmitted to Netrum servers.
+- Transaction signing is performed locally.
+- Mining rewards are claimed directly from your wallet.
+
+
+---
+
 ## License
 
 Netrum Lite Node is source-available software.
@@ -380,6 +407,12 @@ See the LICENSE file for complete terms.
 
 
 ---
+
+<p align="center">
+
+Built with ❤️ by <strong>Netrum Labs</strong>
+
+</p>
 
 
 
