@@ -39,11 +39,11 @@ To run **Netrum Lite Node v3** smoothly, your system should meet the following m
 
 ## Hardware Requirements
 
-| Component | Minimum | Recommended |
-|-----------|---------|-------------|
-| CPU | 2 Cores | 2+ Cores |
-| RAM | 4 GB | 6 GB or More |
-| Disk | 50 GB SSD | 100 GB SSD |
+| Component | Minimum | Recommended  |
+|-----------|---------|------------- |
+| CPU       | 2 Cores | 2+ Cores     |
+| RAM       | 4 GB    | 6 GB or More |
+| Disk      | 50 GB   | 100 GB SSD   |
 
 > SSD storage is highly recommended for better node performance and stability.
 
@@ -51,8 +51,8 @@ To run **Netrum Lite Node v3** smoothly, your system should meet the following m
 
 | Connection | Minimum |
 |------------|----------|
-| Download | 10 Mbps |
-| Upload | 10 Mbps |
+| Download   | 10 Mbps |
+| Upload     | 10 Mbps |
 
 > A stable internet connection is required for synchronization, mining, task execution, and reward claiming.
 
@@ -68,18 +68,316 @@ To run **Netrum Lite Node v3** smoothly, your system should meet the following m
 
 ---
 
-# Architecture Overview
+# System Dependencies
 
-Netrum Lite Node v3 consists of several independent background workers.
+Before installing **Netrum Lite Node v3**, make sure your system has the required packages installed.
 
-- Node Registration Worker
-- Mining Worker
-- Task Worker
-- Auto Update Worker
-- Sync Worker
-- Claim System
-- Health Check & Debug System
+## Ubuntu
 
-All workers communicate securely with the Netrum API Server while maintaining local configuration through the environment manager.
+```bash
+sudo apt update && sudo apt install -y python3.10 python3.10-venv python3-pip python3-apt command-not-found curl git unzip build-essential
+```
+
+If your system reports issues with `python3-apt` or `command-not-found`, run:
+
+```bash
+sudo apt install --reinstall -y python3-apt command-not-found
+```
 
 ---
+
+## Verify Python Version
+
+```bash
+python3 --version
+```
+
+Expected output:
+
+```text
+Python 3.10.x
+```
+
+> Netrum Lite Node v3 officially supports **Python 3.10**.
+
+> The installer will automatically verify the Python version before installation.
+
+
+---
+
+# Official Node Installation
+
+Deploy the latest **Netrum Lite Node v3** using the official installer.
+
+```bash
+curl -sSL https://lite-node.netrumlabs.live/linux/install.sh | bash
+```
+
+### The installer automatically performs:
+
+- ✅ Python 3.10 verification
+- ✅ Dependency installation
+- ✅ Latest Lite Node download
+- ✅ Virtual environment setup
+- ✅ Default `.env` creation
+- ✅ CLI installation
+- ✅ System verification
+- ✅ Ready-to-use node setup
+
+
+---
+
+# Installation Directory Structure
+
+After installation, Netrum Lite Node v3 creates the following directories on your system.
+
+| Directory | Purpose |
+|-----------|---------|
+| `~/netrum-lite` | Main Netrum Lite Node installation directory. Contains the CLI application, workers, configuration, and source code. |
+| `/var/usr/netrum-system` | Stores internal system files, background workers, update services, and runtime components. |
+| `/var/usr/netrum-backups` | Stores automatic backups created by the node before important updates or recovery operations. |
+
+> ⚠️ Do not manually modify or delete files inside **`/var/usr/netrum-system`** unless instructed by Netrum Labs. These files are managed automatically by the node.
+
+> 💾 Backup files stored in **`/var/usr/netrum-backups`** can be used to restore your node if an update or system failure occurs.
+
+
+---
+
+
+# Node Setup
+
+After the installation is complete, the installer will display:
+
+```text
+✅ Netrum Lite Node v3 setup completed successfully.
+
+Installation Complete!
+
+You can now use the agent by typing:
+
+netrum-agent-setup   - Setup menu
+netrum-agent         - Start agent
+```
+
+
+---
+
+# The first command you should run is:
+
+```bash
+netrum-agent-setup
+```
+
+This command launches the interactive setup wizard and prepares your node for the Netrum Network.
+
+
+<p align="center">
+  <img src="assets/netrum-agent-setup.png" width="100%">
+</p>
+
+
+## Netrum Agent Setup
+
+The setup menu guides you through the complete node configuration process.
+
+```text
+📋 Setup Menu
+
+[1] Node New Setup
+    Setup a new node using your private key.
+
+[2] Node Auto Fix
+    Automatically detect and repair common node issues.
+
+[3] Exit
+```
+
+### Option 1 — Node New Setup
+
+This option performs the complete first-time node setup.
+
+During the setup process, Netrum Lite Node will:
+
+- Generate your local wallet configuration.
+- Securely store your private key on your machine.
+- Validate your system requirements.
+- Register your node in server.
+- Create a authentication token.
+- Synchronize node information.
+- Prepare the mining environment.
+- Configure all required background services.
+
+> ⚠️ Your private key never leaves your machine. It is stored locally and used only for transaction signing.
+
+---
+
+### Option 2 — Node Auto Fix
+
+Node Auto Fix scans your installation and automatically repairs common issues, including:
+
+- Missing configuration files
+- Registration issues
+- Mining token problems
+- Synchronization issues
+- Background worker issues
+- System validation checks
+
+This command is useful whenever your node is not working as expected.
+
+
+---
+
+After the setup finishes successfully, your node is ready to start.
+
+Run:
+
+```bash
+netrum-agent
+```
+
+---
+
+# Main Menu
+
+When you start the agent, the following menu will appear.
+
+<p align="center">
+  <img src="assets/netrum-agent.png" width="100%">
+</p>
+
+```
+1. 🔧 Node Manually Start
+2. 🔧 Node Auto Fix
+3. 📊 Node Logs
+4. ❌ Exit
+```
+
+---
+
+## Step 1 — Node Manually Start
+
+For the very first time, select:
+
+```text
+1. 🔧 Node Manually Start
+```
+
+This opens the complete manual setup menu.
+
+```
+1. 🔧 System
+2. 📝 Register
+3. 🎫 Setup Auto Token Worker
+4. 🤖 Setup Auto Task Worker
+5. 🔄 Setup Auto Sync Worker
+6. ⛏️ Mining (Start + Auto Worker Setup)
+7. 💰 Claim
+8. 🔙 Back to Main Menu
+```
+
+Complete the setup from **top to bottom**.
+
+Recommended order:
+
+1. 🔧 System
+2. 📝 Register
+3. 🎫 Setup Auto Token Worker
+4. 🤖 Setup Auto Task Worker
+5. 🔄 Setup Auto Sync Worker
+6. ⛏️ Mining (Start + Auto Worker Setup)
+7. 💰 Claim
+
+Once these steps are complete, your node is fully configured and all required background workers will be running automatically.
+
+---
+
+## Auto Fix
+
+If your node encounters any issue, select:
+
+```text
+2. 🔧 Node Auto Fix
+```
+
+The Auto Fix and scan system automatically checks and repairs common problems, including:
+
+```
+1. 🔍 Auto Scan Full Node
+2. 🔧 Auto Fix Node
+3. ⬅️ Back
+```
+
+In most cases, running **Node Auto Fix** is enough to restore the node without manual troubleshooting.
+
+---
+
+## View Node Logs
+
+To monitor your node status, return to the Main Menu and select:
+
+```text
+3. 📊 Node Logs
+```
+
+This displays:
+
+```
+1. 📋 Task Logs
+2. 🔄 Sync Logs
+3. ⛏️ Mining Logs
+4. 🔙 Back to Main Menu
+```
+
+Use this menu whenever you want to monitor your node.
+
+---
+
+
+# Need Help?
+
+If you encounter any errors while setting up or running **Netrum Lite Node v3**, don't worry.
+
+Please visit our **Discord Server** and create a post in the **`#node-support`** channel.
+
+Share the following information to help us troubleshoot your issue faster:
+
+- Operating System and Ubuntu version
+- Error message
+- Terminal screenshot
+- Relevant logs (if available)
+
+Our team and community will help you resolve the issue as quickly as possible.
+
+### Join the Netrum Discord Community
+
+**:contentReference[oaicite:0]{index=0}**
+
+
+---
+
+## License
+
+Netrum Lite Node is source-available software.
+
+You are free to:
+
+- ✅ Download and run your own node.
+- ✅ Inspect the source code.
+- ✅ Report bugs and security issues.
+- ✅ Submit feature requests and GitHub Issues.
+
+You may NOT:
+
+- ❌ Modify and redistribute the source code.
+- ❌ Publish modified versions.
+- ❌ Use the source code in another project.
+- ❌ Commercially distribute the software.
+
+See the LICENSE file for complete terms.
+
+
+
+
+
+

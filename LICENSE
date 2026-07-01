@@ -1,0 +1,38 @@
+Netrum Lite Node License (NLL) v1.0
+
+Copyright (c) 2026 Netrum Labs.
+All Rights Reserved.
+
+Permission is granted to any individual or organization to:
+
+• Download and use Netrum Lite Node.
+• Install and run a public or private Netrum Lite Node.
+• Participate in the Netrum Network.
+• View the source code for educational, security review, and transparency purposes.
+• Report bugs, security vulnerabilities, or submit feature requests through the official GitHub Issues page.
+
+The following actions are NOT permitted without prior written permission from Netrum Labs:
+
+• Modifying the source code.
+• Redistributing modified versions of the software.
+• Creating forks intended for production use.
+• Using any part of the source code in another project.
+• Commercial use of the source code or any derivative work.
+• Removing or modifying copyright notices.
+• Rebranding or claiming ownership of the software.
+
+Contributions
+
+Bug reports, issue reports, documentation improvements, and pull requests may be submitted through the official GitHub repository.
+
+Netrum Labs reserves the right to accept, reject, or modify any contribution.
+
+Disclaimer
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, OR NON-INFRINGEMENT.
+
+IN NO EVENT SHALL NETRUM LABS OR ITS CONTRIBUTORS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING FROM THE USE OF THIS SOFTWARE.
+
+For commercial licensing or other permissions, please contact Netrum Labs.
+
+https://github.com/NetrumLabs/netrum-lite-node
