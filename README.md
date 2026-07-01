@@ -351,7 +351,9 @@ Our team and community will help you resolve the issue as quickly as possible.
 
 ### Join the Netrum Discord Community
 
-**:contentReference[oaicite:0]{index=0}**
+For additional support, join our Discord community:
+
+Discord Server: https://discord.com/invite/87hVVDuppf
 
 
 ---
@@ -376,6 +378,8 @@ You may NOT:
 
 See the LICENSE file for complete terms.
 
+
+---
 
 
 
