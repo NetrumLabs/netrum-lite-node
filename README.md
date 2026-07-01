@@ -9,9 +9,28 @@
 ![Status](https://img.shields.io/badge/Status-Stable-brightgreen)
 
 
+
+
 # Netrum Lite Node v3
 
 > Lightweight CLI node for the Netrum decentralized compute network.
+
+
+## Table of Contents
+
+- What is Netrum Lite Node v3?
+- Hardware & Network Requirements
+- Supported Operating System
+- Install System Dependencies
+- Official Node Installation
+- Installation Directory Structure
+- Node Setup
+- The first command you should run is
+- Main Menu
+- Need Help?
+- Updates
+- Security
+- License
 
 ---
 
@@ -75,7 +94,7 @@ To run **Netrum Lite Node v3** smoothly, your system should meet the following m
 
 ---
 
-# System Dependencies
+# Install System Dependencies
 
 Before installing **Netrum Lite Node v3**, make sure your system has the required packages installed.
 
@@ -385,7 +404,7 @@ No additional action is required from the node operator.
 
 ---
 
-## License
+# License
 
 Netrum Lite Node is source-available software.
 
