@@ -204,10 +204,6 @@ netrum-agent-setup
 
 This command launches the interactive setup menu and prepares your node for the Netrum Network.
 
-<p align="center">
-  <img src="assets/netrum-agent-setup.png" width="100%">
-</p>
-
 # Setup Menu
 
 The setup command provides the following menu:
@@ -336,10 +332,6 @@ This launches the main Netrum Lite Node control menu.
 # Main Menu
 
 The current Netrum Lite Node v4 main menu is:
-
-<p align="center">
-  <img src="assets/netrum-agent.png" width="100%">
-</p>
 
 ```text
 ╔═══════════════════════════════════════════════════════════╗
@@ -601,5 +593,4 @@ See the `LICENSE` file for complete terms.
 Built with ❤️ by <strong>Netrum Labs</strong>
 
 </p>
-```
 
